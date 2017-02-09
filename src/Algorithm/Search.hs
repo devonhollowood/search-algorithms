@@ -66,9 +66,7 @@ dijkstra next pred prunes init =
   go (Map.singleton init (0, [])) Set.empty init
   where
     go visited queue current
-      | pred current =
-        fmap reverse
-        <$> Map.lookup current visited
+      | pred current = Just $ reverse <$> (visited Map.! current)
       | otherwise =
         let (old_cost, old_steps) = Maybe.fromJust $ Map.lookup current visited
             new_cost_steps =
@@ -109,7 +107,7 @@ search empty next pred prunes init =
   reverse <$> go (Map.singleton init []) empty init
   where
     go visited queue current
-      | pred current = Map.lookup current visited
+      | pred current = Just $ visited Map.! current
       | otherwise =
         let steps_so_far = Maybe.fromJust $ Map.lookup current visited
             new_states =
@@ -135,7 +133,7 @@ instance SearchContainer Seq.Seq where
     case Seq.viewl seq of
       Seq.EmptyL -> Nothing
       (x Seq.:< xs) -> Just (x, xs)
-  push seq a = a Seq.<| seq
+  push seq a = seq Seq.|> a
 
 instance SearchContainer [] where
   pop list =
