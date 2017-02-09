@@ -62,11 +62,11 @@ dijkstra :: (Ord state, Num cost, Ord cost) =>
   -- ^ Initial state
   -> Maybe (cost, [(cost, state)])
   -- (Total cost, [(incremental cost, step)]) for the first path found which
-dijkstra next pred prunes init =
-  go (Map.singleton init (0, [])) Set.empty init
+dijkstra next solved prunes initial =
+  go (Map.singleton initial (0, [])) Set.empty initial
   where
     go visited queue current
-      | pred current = Just $ reverse <$> (visited Map.! current)
+      | solved current = Just $ reverse <$> (visited Map.! current)
       | otherwise =
         let (old_cost, old_steps) = Maybe.fromJust $ Map.lookup current visited
             new_cost_steps =
@@ -103,11 +103,11 @@ search :: (Ord state, SearchContainer f) =>
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-search empty next pred prunes init =
-  reverse <$> go (Map.singleton init []) empty init
+search empty next solved prunes initial =
+  reverse <$> go (Map.singleton initial []) empty initial
   where
     go visited queue current
-      | pred current = Just $ visited Map.! current
+      | solved current = Just $ visited Map.! current
       | otherwise =
         let steps_so_far = Maybe.fromJust $ Map.lookup current visited
             new_states =
@@ -129,11 +129,11 @@ class SearchContainer f where
   push :: Ord a => f a -> a -> f a
 
 instance SearchContainer Seq.Seq where
-  pop seq =
-    case Seq.viewl seq of
+  pop queue =
+    case Seq.viewl queue of
       Seq.EmptyL -> Nothing
       (x Seq.:< xs) -> Just (x, xs)
-  push seq a = seq Seq.|> a
+  push queue a = queue Seq.|> a
 
 instance SearchContainer [] where
   pop list =
