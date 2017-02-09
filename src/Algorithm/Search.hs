@@ -112,7 +112,7 @@ search empty next solved prunes initial =
         let steps_so_far = Maybe.fromJust $ Map.lookup current visited
             new_states =
               Map.fromList . map (\st -> (st, st:steps_so_far)) $ next current
-            new_visited = Map.unionWith shorter visited new_states
+            new_visited = Map.union visited new_states
             new_queue =
               List.foldl' push queue .
                filter (not . \st ->
@@ -120,9 +120,6 @@ search empty next solved prunes initial =
                       )
                $ Map.keys new_states
         in pop new_queue >>= (\(x, xs) -> go new_visited xs x)
-    shorter xs ys
-      | length xs <= length ys = xs
-      | otherwise = ys
 
 class SearchContainer f where
   pop :: Ord a => f a -> Maybe (a, f a)
