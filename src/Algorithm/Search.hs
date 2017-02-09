@@ -16,15 +16,15 @@ bfs :: Ord state =>
   -- ^ Function to generate "next" states given a current state
   -> (state -> Bool)
   -- ^ Predicate to determine if solution found. 'bfs' returns a path to the
-  -- first state for which this predicate returns True
+  -- first state for which this predicate returns 'True'.
   -> [state -> Bool]
-  -- ^ List of ways to prune search. These are predicates which, if True, are
-  -- considered to indicate a "dead end"
+  -- ^ List of ways to prune search. These are predicates which, if 'True', are
+  -- considered to indicate a "dead end".
   -> state
   -- ^ Initial state
   -> Maybe [state]
-  -- ^ First path found to a state matching the predicate, or Nothing if no such
-  -- path exists
+  -- ^ First path found to a state matching the predicate, or 'Nothing' if no
+  -- such path exists.
 bfs = search Seq.empty
 
 -- | Perform a depth-first search over a set of states
@@ -33,15 +33,15 @@ dfs :: Ord state =>
   -- ^ Function to generate "next" states given a current state
   -> (state -> Bool)
   -- ^ Predicate to determine if solution found. 'dfs' returns a path to the
-  -- first state for which this predicate returns True
+  -- first state for which this predicate returns 'True'.
   -> [state -> Bool]
-  -- ^ List of ways to prune search. These are predicates which, if True, are
-  -- considered to indicate a "dead end"
+  -- ^ List of ways to prune search. These are predicates which, if 'True', are
+  -- considered to indicate a "dead end".
   -> state
   -- ^ Initial state
   -> Maybe [state]
-  -- ^ First path found to a state matching the predicate, or Nothing if no such
-  -- path exists
+  -- ^ First path found to a state matching the predicate, or 'Nothing' if no
+  -- such path exists.
 dfs = search []
 
 -- | Perform a shortest-path search over a set of states using Dijkstra's
@@ -54,10 +54,10 @@ dijkstra :: (Ord state, Num cost, Ord cost) =>
   -- given the current state
   -> (state -> Bool)
   -- ^ Predicate to determine if solution found. 'dijkstra' returns the shortest
-  -- path to the first state for which this predicate returns True
+  -- path to the first state for which this predicate returns 'True'.
   -> [state -> Bool]
-  -- ^ List of ways to prune search. These are predicates which, if True, are
-  -- considered to indicate a "dead end"
+  -- ^ List of ways to prune search. These are predicates which, if 'True', are
+  -- considered to indicate a "dead end".
   -> state
   -- ^ Initial state
   -> Maybe (cost, [(cost, state)])
@@ -91,20 +91,20 @@ dijkstra next pred prunes init =
 
 search :: (Ord state, SearchContainer f) =>
   f state
-  -- ^ empty SearchContainer
+  -- ^ empty 'SearchContainer'
   -> (state -> [state])
   -- ^ Function to generate "next" states given a current state
   -> (state -> Bool)
   -- ^ Predicate to determine if solution found. 'search' returns a path to the
-  -- first state for which this predicate returns True
+  -- first state for which this predicate returns 'True'.
   -> [state -> Bool]
-  -- ^ List of ways to prune search. These are predicates which, if True, are
-  -- considered to indicate a "dead end"
+  -- ^ List of ways to prune search. These are predicates which, if 'True', are
+  -- considered to indicate a "dead end".
   -> state
   -- ^ Initial state
   -> Maybe [state]
-  -- ^ First path found to a state matching the predicate, or Nothing if no such
-  -- path exists
+  -- ^ First path found to a state matching the predicate, or 'Nothing' if no
+  -- such path exists.
 search empty next pred prunes init =
   reverse <$> go (Map.singleton init []) empty init
   where
