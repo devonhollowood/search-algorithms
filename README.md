@@ -5,6 +5,8 @@ Lots of problems can be modeled as graphs, but oftentimes we don't want to make 
 
 ## Change-making problem
 ```haskell
+import Algorithm.Search (bfs)
+
 countChange target = bfs add_one_coin (== target) [(> target)] 0
   where
     add_one_coin amt = map (+ amt) coins
@@ -17,6 +19,7 @@ countChange target = bfs add_one_coin (== target) [(> target)] 0
 
 ## Simple directed acyclic graph:
 ```haskell
+import Algorithm.Search (dfs)
 import qualified Data.Map as Map
 
 graph = Map.fromList [
