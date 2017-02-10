@@ -1,6 +1,6 @@
 module Algorithm.Search (
-  dfs,
   bfs,
+  dfs,
   dijkstra
   ) where
 
@@ -11,6 +11,18 @@ import qualified Data.Maybe as Maybe
 import qualified Data.List as List
 
 -- | Perform a breadth-first search over a set of states
+--
+-- Example: Making change problem
+--
+-- >>> :{
+-- countChange target = bfs add_one_coin (== target) [(> target)] 0
+--   where
+--     add_one_coin amt = map (+ amt) coins
+--     coins = [1, 5, 10, 25]
+-- :}
+--
+-- >>> countChange 67
+-- Just [1,2,7,17,42,67]
 bfs :: Ord state =>
   (state -> [state])
   -- ^ Function to generate "next" states given a current state
@@ -28,6 +40,15 @@ bfs :: Ord state =>
 bfs = search Seq.empty
 
 -- | Perform a depth-first search over a set of states
+--
+-- Example: Simple directed graph search
+--
+-- >>> import qualified Data.Map as Map
+--
+-- >>> graph = Map.fromList [(1, [2, 3]), (2, [4]), (3, [4]), (4, [])]
+--
+-- >>> dfs (graph Map.!) (== 4) [] 1
+-- Just [3,4]
 dfs :: Ord state =>
   (state -> [state])
   -- ^ Function to generate "next" states given a current state
@@ -48,6 +69,20 @@ dfs = search []
 -- | algorithm. Given a set of way of generating neighboring states and
 -- | incremental costs from a current state, this will find the least-costly
 -- | path from an initial state to a state matching a given predicate
+--
+-- Example: Making change problem, with a twist: you only have rare misprint
+-- dimes which are really worth $10 each
+--
+-- >>> :{
+-- countChange target = dijkstra add_one_coin (== target) [(> target)] 0
+--   where
+--     add_one_coin amt =
+--       map (\(true_val, face_val) -> (true_val, face_val + amt)) coin_values
+--     coin_values = [(1, 1), (5, 5), (1000, 10), (25, 25)]
+-- :}
+--
+-- >>> countChange 67
+-- Just (67,[(1,1),(1,2),(5,7),(5,12),(5,17),(25,42),(25,67)])
 dijkstra :: (Ord state, Num cost, Ord cost) =>
   (state -> [(cost, state)])
   -- ^ Function to generate list of incremental cost and neighboring states
