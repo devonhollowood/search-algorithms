@@ -1,7 +1,8 @@
 module Algorithm.Search (
   bfs,
   dfs,
-  dijkstra
+  dijkstra,
+  aStar
   ) where
 
 import qualified Data.Map as Map
@@ -9,6 +10,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.Maybe as Maybe
 import qualified Data.List as List
+
 
 -- | Perform a breadth-first search over a set of states
 --
@@ -39,6 +41,7 @@ bfs :: Ord state =>
   -- such path exists.
 bfs = search Seq.empty
 
+
 -- | Perform a depth-first search over a set of states
 --
 -- Example: Simple directed graph search
@@ -64,6 +67,7 @@ dfs :: Ord state =>
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
 dfs = search []
+
 
 -- | Perform a shortest-path search over a set of states using Dijkstra's
 -- | algorithm. Given a set of way of generating neighboring states and
@@ -122,6 +126,54 @@ dijkstra next solved prunes initial =
         in pop new_queue >>= (\((_, st), queue') -> go new_visited queue' st)
     less_costly a b = if fst a <= fst b then a else b
 
+
+-- | Performs A* search algorithm.
+--
+-- This algorithm is similar to Dijkstra's algorithm, but in addition to
+-- supplying it a way to generate a list of next states, you supply it a
+-- lower bound on the remaining cost.
+--
+-- Example: Path finding in taxicab geometry
+--
+-- >>> :{
+-- neighbors (x, y) = [(x, y - 1), (x, y + 1), (x - 1, y), (x + 1, y)]
+-- dist (x1, y1) (x2, y2) = abs (y2 - y1) + abs (x2 - x1)
+-- nextTowards dest pos = map (\p -> (1, dist p dest, p)) (neighbors pos)
+-- :}
+--
+-- >>> aStar (nextTowards (0, 2)) (== (0, 2)) [(== (0, 1))] (0, 0)
+-- Just (4,[(1,(-1,0)),(1,(-1,1)),(1,(-1,2)),(1,(0,2))])
+aStar :: (Ord state, Num cost, Ord cost) =>
+  (state -> [(cost, cost, state)])
+  -- ^ Function which, when given the current state, produces a list whose
+  -- elements are (incremental cost to reach neighboring state,
+  -- lower bound on remaining cost from said state, said state).
+  -> (state -> Bool)
+  -- ^ Predicate to determine if solution found. 'aStar' returns the shortest
+  -- path to the first state for which this predicate returns 'True'.
+  -> [state -> Bool]
+  -- ^ List of ways to prune search. These are predicates which, if 'True', are
+  -- considered to indicate a "dead end".
+  -> state
+  -- ^ Initial state
+  -> Maybe (cost, [(cost, state)])
+  -- (Total cost, [(incremental cost, step)]) for the first path found which
+aStar next found prunes initial =
+  -- The idea of this implementation is that we can use the same machinery as
+  -- Dijkstra's algorithm, by changing Dijsktra's cost function to be
+  -- (incremental cost + lower bound remaining cost). We'd still like to be able
+  -- to return the list of incremental costs, so we modify the internal state to
+  -- be (incremental cost to state, state). Then at the end we undo this
+  -- transformation
+  unpack <$> dijkstra next' (found . snd) (map (. snd) prunes) (0, initial)
+  where
+    next' (_, st) = map pack (next st)
+    pack (incr, est, new_st) = (incr + est, (incr, new_st))
+    unpack (_, packed_states) =
+      let unpacked_states = map snd packed_states
+      in (sum (map fst unpacked_states), unpacked_states)
+
+-- | Workhorse simple search algorithm, generalized over search container
 search :: (Ord state, SearchContainer f) =>
   f state
   -- ^ empty 'SearchContainer'

@@ -2,8 +2,8 @@ name:                search-algorithms
 version:             0.1.0.0
 synopsis:            Common graph search algorithms
 description:         Library containing common graph search algorithms,
-                     including depth-first and breadth-first searches, and
-                     Dijkstra's algorithm
+                     including depth-first and breadth-first searches,
+                     Dijkstra's algorithm, and A*
 homepage:            https://github.com/devonhollowood/search-algorithms#readme
 license:             BSD3
 license-file:        LICENSE
