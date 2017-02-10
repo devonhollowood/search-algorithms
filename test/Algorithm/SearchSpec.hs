@@ -30,6 +30,24 @@ cyclic_weighted_graph = Map.fromList [
   ('d', [])
   ]
 
+-- | Example for edit dist
+edits :: String -> [String]
+edits str = replacements str ++ additions str ++ subtractions str
+  where
+    replacements [] = []
+    replacements (c : cs) =
+      map (: cs) ['a' .. 'z'] ++ map (c :) (replacements cs)
+    additions [] = map (: []) ['a' .. 'z']
+    additions (c : cs) = map (: c : cs) ['a' .. 'z'] ++ map (c :) (additions cs)
+    subtractions [] = []
+    subtractions (c : cs) = cs : map (c :) (subtractions cs)
+
+lowerBoundEditDist :: String -> String -> Int
+lowerBoundEditDist a "" = length a
+lowerBoundEditDist "" b = length b
+lowerBoundEditDist (a : as) (b : bs) =
+  (if a == b then 0 else 1) + lowerBoundEditDist as bs
+
 spec :: Spec
 spec = do
   describe "bfs" $ do
@@ -61,4 +79,17 @@ spec = do
         `shouldBe` Just (6, [(1, 'b'), (5, 'd')])
     it "returns Nothing when no path is possible" $ do
       dijkstra (cyclic_weighted_graph Map.!) (== 'd') [(== 'b'), (== 'c')] 'a'
+        `shouldBe` Nothing
+  describe "aStar" $ do
+    let next = map (\str -> (1, lowerBoundEditDist str "frog", str)) . edits
+    it "performs the A* algorithm" $ do
+      aStar next (== "frog") [] "dog"
+        `shouldBe` Just (2, [(1, "drog"), (1, "frog")])
+    it "handles pruning" $ do
+      let dict = ["dog", "frog", "fog", "bog", "grog", "agog"]
+      aStar next (== "frog") [(\word -> not $ word `elem` dict)] "dog"
+        `shouldBe` Just (2, [(1, "fog"), (1, "frog")])
+    it "returns Nothing when no path is possible" $ do
+      let dict = ["dog", "frog", "bog", "grog", "agog"]
+      aStar next (== "frog") [(\word -> not $ word `elem` dict)] "dog"
         `shouldBe` Nothing

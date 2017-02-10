@@ -33,3 +33,34 @@ graph = Map.fromList [
 -- >>> dfs (graph Map.!) (== 4) [] 1
 -- Just [3,4]
 ```
+
+## Using A* to find edit distance:
+```haskell
+import Algorithm.Search (astar)
+
+edits :: String -> [String]
+edits str = replacements str ++ additions str ++ subtractions str
+  where
+    replacements [] = []
+    replacements (c : cs) =
+      map (: cs) ['a' .. 'z'] ++ map (c :) (replacements cs)
+    additions [] = map (: []) ['a' .. 'z']
+    additions (c : cs) = map (: c : cs) ['a' .. 'z'] ++ map (c :) (additions cs)
+    subtractions [] = []
+    subtractions (c : cs) = cs : map (c :) (subtractions cs)
+
+lowerBoundEditDist :: String -> String -> Int
+lowerBoundEditDist a "" = length a
+lowerBoundEditDist "" b = length b
+lowerBoundEditDist (a : as) (b : bs) =
+  (if a == b then 0 else 1) + lowerBoundEditDist as bs
+
+editDist from to = aStar next (== to) [] from
+  where
+    next = map (\str -> (1, lowerBoundEditDist str "frog", str)) . edits
+
+-- editDist gives the edit distance between two strings, and the incremental
+-- costs and strings along the way:
+-- >>> editDist "dog" "frog"
+-- Just (2, [(1, "drog"), (1, "frog")])
+```
