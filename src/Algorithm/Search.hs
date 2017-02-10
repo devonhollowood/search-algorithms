@@ -118,7 +118,7 @@ dijkstra next solved prunes initial =
               . filter (not . \(st, _) ->
                            st `Map.member` visited || any ($ st) prunes
                        )
-               $ Map.toList new_cost_steps
+              $ Map.toList new_cost_steps
         in pop new_queue >>= (\((_, st), queue') -> go new_visited queue' st)
     less_costly a b = if fst a <= fst b then a else b
 
@@ -149,11 +149,11 @@ search empty next solved prunes initial =
               Map.fromList . map (\st -> (st, st:steps_so_far)) $ next current
             new_visited = Map.union visited new_states
             new_queue =
-              List.foldl' push queue .
-               filter (not . \st ->
-                         st `Map.member` visited || any ($ st) prunes
-                      )
-               $ Map.keys new_states
+              List.foldl' push queue
+              . filter (not . \st ->
+                           st `Map.member` visited || any ($ st) prunes
+                       )
+              $ Map.keys new_states
         in pop new_queue >>= (\(x, xs) -> go new_visited xs x)
 
 class SearchContainer f where
