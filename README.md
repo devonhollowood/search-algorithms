@@ -57,7 +57,7 @@ lowerBoundEditDist (a : as) (b : bs) =
 
 editDist from to = aStar next (== to) [] from
   where
-    next = map (\str -> (1, lowerBoundEditDist str "frog", str)) . edits
+    next = map (\str -> (1, lowerBoundEditDist str to, str)) . edits
 
 -- editDist gives the edit distance between two strings, and the incremental
 -- costs and strings along the way:
