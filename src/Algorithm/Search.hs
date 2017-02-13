@@ -8,7 +8,6 @@ module Algorithm.Search (
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
-import qualified Data.Maybe as Maybe
 import qualified Data.List as List
 
 
@@ -20,11 +19,11 @@ import qualified Data.List as List
 -- countChange target = bfs add_one_coin (== target) [(> target)] 0
 --   where
 --     add_one_coin amt = map (+ amt) coins
---     coins = [1, 5, 10, 25]
+--     coins = [25, 10, 5, 1]
 -- :}
 --
 -- >>> countChange 67
--- Just [1,2,7,17,42,67]
+-- Just [25,50,60,65,66,67]
 bfs :: Ord state =>
   (state -> [state])
   -- ^ Function to generate "next" states given a current state
@@ -39,7 +38,7 @@ bfs :: Ord state =>
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-bfs = search Seq.empty const
+bfs = generalizedSearch Seq.empty id const
 
 
 -- | Perform a depth-first search over a set of states
@@ -66,7 +65,7 @@ dfs :: Ord state =>
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-dfs = search [] const
+dfs = generalizedSearch [] id const
 
 
 -- | Perform a shortest-path search over a set of states using Dijkstra's
@@ -82,7 +81,7 @@ dfs = search [] const
 --   where
 --     add_one_coin amt =
 --       map (\(true_val, face_val) -> (true_val, face_val + amt)) coin_values
---     coin_values = [(1, 1), (5, 5), (1000, 10), (25, 25)]
+--     coin_values = [(25, 25), (1000, 10), (5, 5), (1, 1)]
 -- :}
 --
 -- >>> countChange 67
@@ -102,29 +101,26 @@ dijkstra :: (Ord state, Num cost, Ord cost) =>
   -> Maybe (cost, [(cost, state)])
   -- (Total cost, [(incremental cost, step)]) for the first path found which
 dijkstra next solved prunes initial =
-  go (Map.singleton initial (0, [])) Set.empty initial
+  -- The idea behind this implementation is that Dijkstra's algorithm is really
+  -- just a generalized search, with the search container being a heap (in this
+  -- case a Set), the search key being the original state, and the stored state
+  -- being (cost so far, state).
+  -- This just makes that transformation, then transforms that result into the
+  -- desired result from `dijkstra`
+  unpack <$>
+  generalizedSearch Set.empty snd least_cost next' (solved . snd)
+    (map (. snd) prunes) (0, initial)
   where
-    go visited queue current
-      | solved current = Just $ reverse <$> (visited Map.! current)
-      | otherwise =
-        let (old_cost, old_steps) = Maybe.fromJust $ Map.lookup current visited
-            new_cost_steps =
-              Map.fromList
-              . map (\(incr, st) ->
-                       let new_cost = old_cost + incr
-                       in (st, (new_cost, (incr, st) : old_steps))
-                    )
-              $ next current
-            new_visited = Map.unionWith less_costly visited new_cost_steps
-            new_queue =
-              List.foldl' push queue
-              . map (\(st, (cost, _)) -> (cost, st))
-              . filter (not . \(st, _) ->
-                           st `Map.member` visited || any ($ st) prunes
-                       )
-              $ Map.toList new_cost_steps
-        in pop new_queue >>= (\((_, st), queue') -> go new_visited queue' st)
-    less_costly a b = if fst a <= fst b then a else b
+    least_cost as [] = as
+    least_cost [] bs = bs
+    least_cost as@((cost_a, _):_) bs@((cost_b, _):_) =
+      if cost_a <= cost_b then as else bs
+    next' (cost, st) = map (\(incr, new_st) -> (incr + cost, new_st)) (next st)
+    unpack packed_states =
+      let costs = map fst packed_states
+          incremental_costs = zipWith (-) costs (0:costs)
+          states = map snd packed_states
+      in (sum incremental_costs, zip incremental_costs states)
 
 
 -- | Performs A* search algorithm.
@@ -136,7 +132,7 @@ dijkstra next solved prunes initial =
 -- Example: Path finding in taxicab geometry
 --
 -- >>> :{
--- neighbors (x, y) = [(x, y - 1), (x, y + 1), (x - 1, y), (x + 1, y)]
+-- neighbors (x, y) = [(x, y + 1), (x - 1, y), (x + 1, y), (x, y - 1)]
 -- dist (x1, y1) (x2, y2) = abs (y2 - y1) + abs (x2 - x1)
 -- nextTowards dest pos = map (\p -> (1, dist p dest, p)) (neighbors pos)
 -- :}
@@ -174,47 +170,56 @@ aStar next found prunes initial =
       in (sum (map fst unpacked_states), unpacked_states)
 
 
-data SearchState f state = SearchState {
+data SearchState f stateKey state = SearchState {
   current :: state,
   queue :: f state,
-  visited :: Map.Map state [state]
+  visited :: Set.Set stateKey,
+  paths :: Map.Map stateKey [state]
   }
 
 
-nextSearchState :: (SearchContainer f, Ord state) =>
+nextSearchState :: (SearchContainer f, Ord stateKey, Ord state) =>
   ([state] -> [state] -> [state])
+  -> (state -> stateKey)
   -> (state -> [state])
   -> [state -> Bool]
-  -> SearchState f state
-  -> Maybe (SearchState f state)
-nextSearchState choose next prunes old =
-  let steps_so_far = visited old Map.! current old
+  -> SearchState f stateKey state
+  -> Maybe (SearchState f stateKey state)
+nextSearchState choose mk_key next prunes old =
+  let steps_so_far = paths old Map.! mk_key (current old)
       new_states = next (current old)
-      (new_queue, new_visited) =
-        List.foldl' (
-        \(queue_st, visited_st) new_st ->
-          if not (new_st `Map.member` visited_st || any ($ new_st) prunes)
-          then
-            (push queue_st new_st,
-             Map.insertWith choose new_st (new_st : steps_so_far) visited_st
-            )
+      (new_queue, new_paths) = List.foldl' (
+        \(q, ps) st ->
+          if mk_key st `Set.member` visited old || any ($ st) prunes
+          then (q, ps)
           else
-            (queue_st, visited_st)
-          )
-        (queue old, visited old)
+            (push q st,
+              Map.insertWith (flip choose) (mk_key st) (st : steps_so_far) ps
+            )
+        )
+        (queue old, paths old)
         new_states
       mk_search_state (new_current, remaining_queue) = SearchState {
         current = new_current,
         queue = remaining_queue,
-        visited = new_visited
+        visited = Set.insert (mk_key new_current) (visited old),
+        paths = new_paths
         }
-  in mk_search_state <$> pop new_queue
+  in do
+    new_state <- mk_search_state <$> pop new_queue
+    if mk_key (current new_state) `Set.member` visited old
+      then nextSearchState choose mk_key next prunes new_state
+      else return new_state
 
 
 -- | Workhorse simple search algorithm, generalized over search container
-search :: (Ord state, SearchContainer f) =>
+-- and combining function
+generalizedSearch :: (SearchContainer f, Ord stateKey, Ord state) =>
   f state
   -- ^ Empty 'SearchContainer'
+  -> (state -> stateKey)
+  -- ^ Function to turn a `state` into a key by which they will be compared
+  -- when determining whether a state has be enqueued
   -> ([state] -> [state] -> [state])
   -- ^ Function `choose`, which when given a choice between an `old` and a `new`
   -- path to a state, `choose old new` returns either `old` or `new` as
@@ -232,11 +237,13 @@ search :: (Ord state, SearchContainer f) =>
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-search empty choose next solved prunes initial =
-  let get_steps search_st = visited search_st Map.! current search_st
+generalizedSearch empty mk_key choose next solved prunes initial =
+  let get_steps search_st = paths search_st Map.! mk_key (current search_st)
   in fmap (reverse . get_steps)
-     . findIterate (solved . current) (nextSearchState choose next prunes)
-     $ SearchState initial empty (Map.singleton initial [])
+     . findIterate (solved . current) (nextSearchState choose mk_key next prunes)
+     $ SearchState initial empty (Set.singleton $ mk_key initial)
+       (Map.singleton (mk_key initial) [])
+
 
 class SearchContainer f where
   pop :: Ord a => f a -> Maybe (a, f a)
@@ -259,6 +266,7 @@ instance SearchContainer [] where
 instance SearchContainer Set.Set where
   pop = Set.minView
   push = flip Set.insert
+
 
 findIterate ::
   (a -> Bool)
