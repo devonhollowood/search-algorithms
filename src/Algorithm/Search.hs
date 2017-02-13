@@ -39,7 +39,7 @@ bfs :: Ord state =>
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-bfs = search Seq.empty
+bfs = search Seq.empty const
 
 
 -- | Perform a depth-first search over a set of states
@@ -66,7 +66,7 @@ dfs :: Ord state =>
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-dfs = search []
+dfs = search [] const
 
 
 -- | Perform a shortest-path search over a set of states using Dijkstra's
@@ -173,10 +173,52 @@ aStar next found prunes initial =
       let unpacked_states = map snd packed_states
       in (sum (map fst unpacked_states), unpacked_states)
 
+
+data SearchState f state = SearchState {
+  current :: state,
+  queue :: f state,
+  visited :: Map.Map state [state]
+  }
+
+
+nextSearchState :: (SearchContainer f, Ord state) =>
+  ([state] -> [state] -> [state])
+  -> (state -> [state])
+  -> [state -> Bool]
+  -> SearchState f state
+  -> Maybe (SearchState f state)
+nextSearchState choose next prunes old =
+  let steps_so_far = visited old Map.! current old
+      new_states = next (current old)
+      (new_queue, new_visited) =
+        List.foldl' (
+        \(queue_st, visited_st) new_st ->
+          if not (new_st `Map.member` visited_st || any ($ new_st) prunes)
+          then
+            (push queue_st new_st,
+             Map.insertWith choose new_st (new_st : steps_so_far) visited_st
+            )
+          else
+            (queue_st, visited_st)
+          )
+        (queue old, visited old)
+        new_states
+      mk_search_state (new_current, remaining_queue) = SearchState {
+        current = new_current,
+        queue = remaining_queue,
+        visited = new_visited
+        }
+  in mk_search_state <$> pop new_queue
+
+
 -- | Workhorse simple search algorithm, generalized over search container
 search :: (Ord state, SearchContainer f) =>
   f state
-  -- ^ empty 'SearchContainer'
+  -- ^ Empty 'SearchContainer'
+  -> ([state] -> [state] -> [state])
+  -- ^ Function `choose`, which when given a choice between an `old` and a `new`
+  -- path to a state, `choose old new` returns either `old` or `new` as
+  -- appropriate
   -> (state -> [state])
   -- ^ Function to generate "next" states given a current state
   -> (state -> Bool)
@@ -190,34 +232,22 @@ search :: (Ord state, SearchContainer f) =>
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-search empty next solved prunes initial =
-  reverse <$> go (Map.singleton initial []) empty initial
-  where
-    go visited queue current
-      | solved current = Just $ visited Map.! current
-      | otherwise =
-        let steps_so_far = Maybe.fromJust $ Map.lookup current visited
-            new_states =
-              Map.fromList . map (\st -> (st, st:steps_so_far)) $ next current
-            new_visited = Map.union visited new_states
-            new_queue =
-              List.foldl' push queue
-              . filter (not . \st ->
-                           st `Map.member` visited || any ($ st) prunes
-                       )
-              $ Map.keys new_states
-        in pop new_queue >>= (\(x, xs) -> go new_visited xs x)
+search empty choose next solved prunes initial =
+  let get_steps search_st = visited search_st Map.! current search_st
+  in fmap (reverse . get_steps)
+     . findIterate (solved . current) (nextSearchState choose next prunes)
+     $ SearchState initial empty (Map.singleton initial [])
 
 class SearchContainer f where
   pop :: Ord a => f a -> Maybe (a, f a)
   push :: Ord a => f a -> a -> f a
 
 instance SearchContainer Seq.Seq where
-  pop queue =
-    case Seq.viewl queue of
+  pop s =
+    case Seq.viewl s of
       Seq.EmptyL -> Nothing
       (x Seq.:< xs) -> Just (x, xs)
-  push queue a = queue Seq.|> a
+  push s a = s Seq.|> a
 
 instance SearchContainer [] where
   pop list =
@@ -229,3 +259,12 @@ instance SearchContainer [] where
 instance SearchContainer Set.Set where
   pop = Set.minView
   push = flip Set.insert
+
+findIterate ::
+  (a -> Bool)
+  -> (a -> Maybe a)
+  -> a
+  -> Maybe a
+findIterate found next initial
+  | found initial = Just initial
+  | otherwise = next initial >>= findIterate found next
