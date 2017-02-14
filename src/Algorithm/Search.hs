@@ -110,7 +110,7 @@ dijkstra next solved prunes initial =
   -- case a Set), the search key being the original state, and the stored state
   -- being (cost so far, state).
   -- This just makes that transformation, then transforms that result into the
-  -- desired result from `dijkstra`
+  -- desired result from @dijkstra@
   unpack <$>
   generalizedSearch
     (Heap.empty :: Heap.MinPQueue cost (cost, state))
@@ -180,6 +180,10 @@ aStar next found prunes initial =
       in (sum (map fst unpacked_states), unpacked_states)
 
 
+-- | A 'SearchState' represents the state of a generalized search at a given
+-- point in an algorithms execution. The advantage of this abstraction is that
+-- it can be used for things like bidirectional searches, where you want to
+-- stop and start a search part-way through.
 data SearchState f stateKey state = SearchState {
   current :: state,
   queue :: f state,
@@ -188,6 +192,8 @@ data SearchState f stateKey state = SearchState {
   }
 
 
+-- | 'nextSearchState' moves from one 'searchState' to the next in the
+-- generalized search algorithm
 nextSearchState :: (SearchContainer f state, Ord stateKey) =>
   ([state] -> [state] -> Bool)
   -> (state -> stateKey)
@@ -228,16 +234,19 @@ nextSearchState better mk_key next prunes old =
 
 
 -- | Workhorse simple search algorithm, generalized over search container
--- and combining function
+-- and combining function. The idea here is that many search algorithms are
+-- at their core the same, with these details substituted. By writing these
+-- searches in terms of this function, we reduce the chances of errors sneaking
+-- into each separate implementation.
 generalizedSearch :: (SearchContainer f state, Ord stateKey) =>
   f state
   -- ^ Empty 'SearchContainer'
   -> (state -> stateKey)
-  -- ^ Function to turn a `state` into a key by which they will be compared
-  -- when determining whether a state has be enqueued
+  -- ^ Function to turn a @state@ into a key by which states will be compared
+  -- when determining whether a state has be enqueued and / or visited
   -> ([state] -> [state] -> Bool)
-  -- ^ Function `better old new`, which when given a choice between an `old` and
-  -- a `new` path to a state, returns True when `new` is a "better" path than
+  -- ^ Function @better old new@, which when given a choice between an @old@ and
+  -- a @new@ path to a state, returns True when @new@ is a "better" path than
   -- old and should thus be inserted
   -> (state -> [state])
   -- ^ Function to generate "next" states given a current state
@@ -260,6 +269,8 @@ generalizedSearch empty mk_key better next solved prunes initial =
        (Map.singleton (mk_key initial) [])
 
 
+-- | The 'SearchContainer' class abstracts the idea of a container to be used in
+-- 'generalizedSearch'
 class SearchContainer f a where
   pop :: f a -> Maybe (a, f a)
   push :: f a -> a -> f a
@@ -283,11 +294,9 @@ instance Ord k => SearchContainer (Heap.MinPQueue k) (k, a) where
   push heap (k, a) = Heap.insert k (k, a) heap
 
 
-findIterate ::
-  (a -> Bool)
-  -> (a -> Maybe a)
-  -> a
-  -> Maybe a
+-- | @findIterate found next initial@ takes an initial seed value and applies
+-- @next@ to it until either @found@ returns True or @next@ returns @Nothing@
+findIterate :: (a -> Bool) -> (a -> Maybe a) -> a -> Maybe a
 findIterate found next initial
   | found initial = Just initial
   | otherwise = next initial >>= findIterate found next
