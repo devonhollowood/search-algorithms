@@ -20,6 +20,7 @@ library
   exposed-modules:     Algorithm.Search
   build-depends:       base >= 4.7 && < 5
                      , containers >= 0.5
+                     , pqueue >= 1.3
   default-language:    Haskell2010
 
 test-suite search-algorithms-test
