@@ -47,6 +47,7 @@ isWall (x, y) = x == 1 && (-2) <= y && y <= 1
 taxicabDistance :: (Int, Int) -> (Int, Int) -> Int
 taxicabDistance (x1, y1) (x2, y2) = abs (x2 - x1) + abs (y2 - y1)
 
+findPath :: (Int, Int) -> (Int, Int) -> Maybe (Int, [(Int, (Int, Int))])
 findPath start end =
   let next =
         map (\pt -> (1, taxicabDistance pt end, pt))
