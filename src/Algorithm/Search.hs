@@ -1,6 +1,11 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
 
+-- | This module contains a collection of generalized graph search algorithms,
+-- for when you don't want to explicitly represent your data as a graph. The
+-- general idea is to provide these algorithms with a way of generating "next"
+-- states (and associated information), a way of determining when you have found
+-- a solution, a way of pruning out "dead ends", and an initial state.
 module Algorithm.Search (
   bfs,
   dfs,
@@ -15,9 +20,13 @@ import qualified Data.PQueue.Prio.Min as Heap
 import qualified Data.List as List
 
 
--- | Perform a breadth-first search over a set of states
+-- | @bfs next solved prunes initial@ performs a breadth-first search over a set
+-- of states, starting with @initial@, generating neighboring states with
+-- @next@, and pruning out any state for which a function in @prunes@ returns
+-- 'True'. It returns a path to a state for which @solved@ returns 'True'.
+-- Returns 'Nothing' if no path is possible.
 --
--- Example: Making change problem
+-- === Example: Making change problem
 --
 -- >>> :{
 -- countChange target = bfs add_one_coin (== target) [(> target)] 0
@@ -45,9 +54,13 @@ bfs :: Ord state =>
 bfs = generalizedSearch Seq.empty id (const . const False)
 
 
--- | Perform a depth-first search over a set of states
+-- | @dfs next solved prunes initial@ performs a depth-first search over a set
+-- of states, starting with @initial@, generating neighboring states with
+-- @next@, and pruning out any state for which a function in @prunes@ returns
+-- 'True'. It returns a depth-first path to a state for which @solved@
+-- returns 'True'. Returns 'Nothing' if no path is possible.
 --
--- Example: Simple directed graph search
+-- === Example: Simple directed graph search
 --
 -- >>> import qualified Data.Map as Map
 --
@@ -72,12 +85,15 @@ dfs :: Ord state =>
 dfs = generalizedSearch [] id (const . const False)
 
 
--- | Perform a shortest-path search over a set of states using Dijkstra's
--- | algorithm. Given a set of way of generating neighboring states and
--- | incremental costs from a current state, this will find the least-costly
--- | path from an initial state to a state matching a given predicate
+-- | @dijkstra next solved prunes initial@ performs a shortest-path search over
+-- a set of states using Dijkstra's algorithm, starting with @initial@,
+-- generating neighboring states and their incremental costs with @next@, and
+-- pruning out any state for which a function in @prunes@ returns 'True'.
+-- This will find the least-costly path from an initial state to a state for
+-- which @solved@ returns 'True'. Returns 'Nothing' if no path to a solved state
+-- is possible.
 --
--- Example: Making change problem, with a twist: you only have rare misprint
+-- === Example: Making change problem, with a twist: you only have rare misprint
 -- dimes which are really worth $10 each
 --
 -- >>> :{
@@ -133,13 +149,16 @@ dijkstra next solved prunes initial =
           zip incremental_costs states)
 
 
--- | Performs A* search algorithm.
+-- | @aStar next solved prunes initial@ performs a directed search using
+-- the A* search algorithm, starting with the state @initial@, generating
+-- neighboring states, their cost, and an estimate of the remaining cost with
+-- @next@, and pruning out any state for which a function in @prunes@ returns
+-- 'True'. This returns a path to a state for which @solved@ returns 'True'.
+-- If the estimate is strictly a lower bound on the remaining cost to reach a
+-- @solved@ state, then the returned path is the shortest path. Returns
+-- 'Nothing' if no path to a @solved@ state is possible.
 --
--- This algorithm is similar to Dijkstra's algorithm, but in addition to
--- supplying it a way to generate a list of next states, you supply it a
--- lower bound on the remaining cost.
---
--- Example: Path finding in taxicab geometry
+-- === Example: Path finding in taxicab geometry
 --
 -- >>> :{
 -- neighbors (x, y) = [(x, y + 1), (x - 1, y), (x + 1, y), (x, y - 1)]
@@ -153,7 +172,7 @@ aStar :: (Num cost, Ord cost, Ord state) =>
   (state -> [(cost, cost, state)])
   -- ^ Function which, when given the current state, produces a list whose
   -- elements are (incremental cost to reach neighboring state,
-  -- lower bound on remaining cost from said state, said state).
+  -- estimate on remaining cost from said state, said state).
   -> (state -> Bool)
   -- ^ Predicate to determine if solution found. 'aStar' returns the shortest
   -- path to the first state for which this predicate returns 'True'.
