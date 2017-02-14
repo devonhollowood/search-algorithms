@@ -234,7 +234,7 @@ nextSearchState better mk_key next prunes old =
 
 
 -- | Workhorse simple search algorithm, generalized over search container
--- and combining function. The idea here is that many search algorithms are
+-- and path-choosing function. The idea here is that many search algorithms are
 -- at their core the same, with these details substituted. By writing these
 -- searches in terms of this function, we reduce the chances of errors sneaking
 -- into each separate implementation.
