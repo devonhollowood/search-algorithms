@@ -54,7 +54,7 @@ findPath start end =
         . taxicabNeighbors
   in aStar next (== end) [isWall] start
 
--- findPath p1 p2 finds a path between @p1@ and @p2@, avoiding the wall
+-- findPath p1 p2 finds a path between p1 and p2, avoiding the wall
 -- >>> findPath (0, 0) (2, 0)
 -- Just (6,[(1,(0,1)),(1,(0,2)),(1,(1,2)),(1,(2,2)),(1,(2,1)),(1,(2,0))])
 --
