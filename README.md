@@ -11,7 +11,7 @@ countChange target = bfs add_one_coin (== target) [(> target)] 0
   where
     add_one_coin amt = map (+ amt) coins
     coins = [1, 5, 10, 25]
-    
+
 -- countChange gives the subtotals along the way to the end:
 -- >>> countChange 67
 -- Just [1, 2, 7, 17, 42, 67]
@@ -25,7 +25,7 @@ import qualified Data.Map as Map
 graph = Map.fromList [
   (1, [2, 3]),
   (2, [4]),
-  (3, [4]), 
+  (3, [4]),
   (4, [])
   ]
 
@@ -34,33 +34,28 @@ graph = Map.fromList [
 -- Just [3,4]
 ```
 
-## Using A* to find edit distance:
+## Using A* to find a path in an area with a wall:
 ```haskell
-import Algorithm.Search (astar)
+import Algorithm.Search (aStar)
 
-edits :: String -> [String]
-edits str = replacements str ++ additions str ++ subtractions str
-  where
-    replacements [] = []
-    replacements (c : cs) =
-      map (: cs) ['a' .. 'z'] ++ map (c :) (replacements cs)
-    additions [] = map (: []) ['a' .. 'z']
-    additions (c : cs) = map (: c : cs) ['a' .. 'z'] ++ map (c :) (additions cs)
-    subtractions [] = []
-    subtractions (c : cs) = cs : map (c :) (subtractions cs)
+taxicabNeighbors :: (Int, Int) -> [(Int, Int)]
+taxicabNeighbors (x, y) = [(x, y + 1), (x - 1, y), (x + 1, y), (x, y - 1)]
 
-lowerBoundEditDist :: String -> String -> Int
-lowerBoundEditDist a "" = length a
-lowerBoundEditDist "" b = length b
-lowerBoundEditDist (a : as) (b : bs) =
-  (if a == b then 0 else 1) + lowerBoundEditDist as bs
+isWall :: (Int, Int) -> Bool
+isWall (x, y) = x == 1 && (-2) <= y && y <= 1
 
-editDist from to = aStar next (== to) [] from
-  where
-    next = map (\str -> (1, lowerBoundEditDist str to, str)) . edits
+taxicabDistance :: (Int, Int) -> (Int, Int) -> Int
+taxicabDistance (x1, y1) (x2, y2) = abs (x2 - x1) + abs (y2 - y1)
 
--- editDist gives the edit distance between two strings, and the incremental
--- costs and strings along the way:
--- >>> editDist "dog" "frog"
--- Just (2, [(1, "drog"), (1, "frog")])
+findPath start end =
+  let next =
+        map (\pt -> (1, taxicabDistance pt end, pt))
+        . taxicabNeighbors
+  in aStar next (== end) [isWall] start
+
+-- findPath p1 p2 finds a path between @p1@ and @p2@, avoiding the wall
+-- >>> findPath (0, 0) (2, 0)
+-- Just (6,[(1,(0,1)),(1,(0,2)),(1,(1,2)),(1,(2,2)),(1,(2,1)),(1,(2,0))])
+--
+-- This correctly goes up and around the wall
 ```
