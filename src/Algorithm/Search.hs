@@ -1,3 +1,6 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+
 module Algorithm.Search (
   bfs,
   dfs,
@@ -8,6 +11,7 @@ module Algorithm.Search (
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
+import qualified Data.PQueue.Prio.Min as Heap
 import qualified Data.List as List
 
 
@@ -38,7 +42,7 @@ bfs :: Ord state =>
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-bfs = generalizedSearch Seq.empty id const
+bfs = generalizedSearch Seq.empty id (const . const False)
 
 
 -- | Perform a depth-first search over a set of states
@@ -65,7 +69,7 @@ dfs :: Ord state =>
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-dfs = generalizedSearch [] id const
+dfs = generalizedSearch [] id (const . const False)
 
 
 -- | Perform a shortest-path search over a set of states using Dijkstra's
@@ -86,7 +90,7 @@ dfs = generalizedSearch [] id const
 --
 -- >>> countChange 67
 -- Just (67,[(1,1),(1,2),(5,7),(5,12),(5,17),(25,42),(25,67)])
-dijkstra :: (Ord state, Num cost, Ord cost) =>
+dijkstra :: (Num cost, Ord cost, Ord state) =>
   (state -> [(cost, state)])
   -- ^ Function to generate list of incremental cost and neighboring states
   -- given the current state
@@ -108,19 +112,25 @@ dijkstra next solved prunes initial =
   -- This just makes that transformation, then transforms that result into the
   -- desired result from `dijkstra`
   unpack <$>
-  generalizedSearch Set.empty snd least_cost next' (solved . snd)
-    (map (. snd) prunes) (0, initial)
+  generalizedSearch
+    (Heap.empty :: Heap.MinPQueue cost (cost, state))
+    snd
+    better
+    next'
+    (solved . snd)
+    (map (. snd) prunes)
+    (0, initial)
   where
-    least_cost as [] = as
-    least_cost [] bs = bs
-    least_cost as@((cost_a, _):_) bs@((cost_b, _):_) =
-      if cost_a <= cost_b then as else bs
+    better [] _ = False
+    better _ [] = True
+    better ((cost_a, _):_) ((cost_b, _):_) = cost_b < cost_a
     next' (cost, st) = map (\(incr, new_st) -> (incr + cost, new_st)) (next st)
     unpack packed_states =
       let costs = map fst packed_states
           incremental_costs = zipWith (-) costs (0:costs)
           states = map snd packed_states
-      in (sum incremental_costs, zip incremental_costs states)
+      in (if null packed_states then 0 else fst . last $ packed_states,
+          zip incremental_costs states)
 
 
 -- | Performs A* search algorithm.
@@ -138,8 +148,8 @@ dijkstra next solved prunes initial =
 -- :}
 --
 -- >>> aStar (nextTowards (0, 2)) (== (0, 2)) [(== (0, 1))] (0, 0)
--- Just (4,[(1,(-1,0)),(1,(-1,1)),(1,(-1,2)),(1,(0,2))])
-aStar :: (Ord state, Num cost, Ord cost) =>
+-- Just (4,[(1,(1,0)),(1,(1,1)),(1,(1,2)),(1,(0,2))])
+aStar :: (Num cost, Ord cost, Ord state) =>
   (state -> [(cost, cost, state)])
   -- ^ Function which, when given the current state, produces a list whose
   -- elements are (incremental cost to reach neighboring state,
@@ -178,14 +188,14 @@ data SearchState f stateKey state = SearchState {
   }
 
 
-nextSearchState :: (SearchContainer f, Ord stateKey, Ord state) =>
-  ([state] -> [state] -> [state])
+nextSearchState :: (SearchContainer f state, Ord stateKey) =>
+  ([state] -> [state] -> Bool)
   -> (state -> stateKey)
   -> (state -> [state])
   -> [state -> Bool]
   -> SearchState f stateKey state
   -> Maybe (SearchState f stateKey state)
-nextSearchState choose mk_key next prunes old =
+nextSearchState better mk_key next prunes old =
   let steps_so_far = paths old Map.! mk_key (current old)
       new_states = next (current old)
       (new_queue, new_paths) = List.foldl' (
@@ -193,9 +203,14 @@ nextSearchState choose mk_key next prunes old =
           if mk_key st `Set.member` visited old || any ($ st) prunes
           then (q, ps)
           else
-            (push q st,
-              Map.insertWith (flip choose) (mk_key st) (st : steps_so_far) ps
-            )
+            let q' = push q st
+                ps' = Map.insert (mk_key st) (st : steps_so_far) ps
+            in case Map.lookup (mk_key st) ps of
+              Just old_path ->
+                if better old_path (st : steps_so_far)
+                then (q', ps')
+                else (q, ps)
+              Nothing -> (q', ps')
         )
         (queue old, paths old)
         new_states
@@ -208,22 +223,22 @@ nextSearchState choose mk_key next prunes old =
   in do
     new_state <- mk_search_state <$> pop new_queue
     if mk_key (current new_state) `Set.member` visited old
-      then nextSearchState choose mk_key next prunes new_state
+      then nextSearchState better mk_key next prunes new_state
       else return new_state
 
 
 -- | Workhorse simple search algorithm, generalized over search container
 -- and combining function
-generalizedSearch :: (SearchContainer f, Ord stateKey, Ord state) =>
+generalizedSearch :: (SearchContainer f state, Ord stateKey) =>
   f state
   -- ^ Empty 'SearchContainer'
   -> (state -> stateKey)
   -- ^ Function to turn a `state` into a key by which they will be compared
   -- when determining whether a state has be enqueued
-  -> ([state] -> [state] -> [state])
-  -- ^ Function `choose`, which when given a choice between an `old` and a `new`
-  -- path to a state, `choose old new` returns either `old` or `new` as
-  -- appropriate
+  -> ([state] -> [state] -> Bool)
+  -- ^ Function `better old new`, which when given a choice between an `old` and
+  -- a `new` path to a state, returns True when `new` is a "better" path than
+  -- old and should thus be inserted
   -> (state -> [state])
   -- ^ Function to generate "next" states given a current state
   -> (state -> Bool)
@@ -237,35 +252,35 @@ generalizedSearch :: (SearchContainer f, Ord stateKey, Ord state) =>
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-generalizedSearch empty mk_key choose next solved prunes initial =
+generalizedSearch empty mk_key better next solved prunes initial =
   let get_steps search_st = paths search_st Map.! mk_key (current search_st)
   in fmap (reverse . get_steps)
-     . findIterate (solved . current) (nextSearchState choose mk_key next prunes)
+     . findIterate (solved . current) (nextSearchState better mk_key next prunes)
      $ SearchState initial empty (Set.singleton $ mk_key initial)
        (Map.singleton (mk_key initial) [])
 
 
-class SearchContainer f where
-  pop :: Ord a => f a -> Maybe (a, f a)
-  push :: Ord a => f a -> a -> f a
+class SearchContainer f a where
+  pop :: f a -> Maybe (a, f a)
+  push :: f a -> a -> f a
 
-instance SearchContainer Seq.Seq where
+instance SearchContainer Seq.Seq a where
   pop s =
     case Seq.viewl s of
       Seq.EmptyL -> Nothing
       (x Seq.:< xs) -> Just (x, xs)
   push s a = s Seq.|> a
 
-instance SearchContainer [] where
+instance SearchContainer [] a where
   pop list =
     case list of
       [] -> Nothing
       (x : xs) -> Just (x, xs)
   push list a = a : list
 
-instance SearchContainer Set.Set where
-  pop = Set.minView
-  push = flip Set.insert
+instance Ord k => SearchContainer (Heap.MinPQueue k) (k, a) where
+  pop = Heap.minView
+  push heap (k, a) = Heap.insert k (k, a) heap
 
 
 findIterate ::
