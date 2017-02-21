@@ -16,7 +16,6 @@ module Algorithm.Search (
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
-import qualified Data.PQueue.Prio.Min as Heap
 import qualified Data.List as List
 
 
@@ -129,7 +128,7 @@ dijkstra next solved prunes initial =
   -- desired result from @dijkstra@
   unpack <$>
   generalizedSearch
-    (Heap.empty :: Heap.MinPQueue cost (cost, state))
+    (emptyLIFOHeap :: LIFOHeap cost (cost, state))
     snd
     better
     next'
@@ -287,6 +286,10 @@ generalizedSearch empty mk_key better next solved prunes initial =
      $ SearchState initial empty (Set.singleton $ mk_key initial)
        (Map.singleton (mk_key initial) [])
 
+newtype LIFOHeap k a = LIFOHeap (Map.Map k [a])
+
+emptyLIFOHeap :: LIFOHeap k a
+emptyLIFOHeap = LIFOHeap Map.empty
 
 -- | The 'SearchContainer' class abstracts the idea of a container to be used in
 -- 'generalizedSearch'
@@ -308,9 +311,14 @@ instance SearchContainer [] a where
       (x : xs) -> Just (x, xs)
   push list a = a : list
 
-instance Ord k => SearchContainer (Heap.MinPQueue k) (k, a) where
-  pop = Heap.minView
-  push heap (k, a) = Heap.insert k (k, a) heap
+instance Ord k => SearchContainer (LIFOHeap k) (k, a) where
+  pop (LIFOHeap inner)
+    | Map.null inner = Nothing
+    | otherwise = case Map.findMin inner of
+      (_, []) -> bugReport "Unexpectedly empty heap element."
+      (_, [a]) -> Just (a, LIFOHeap $ Map.deleteMin inner)
+      (_, a : _) -> Just (a, LIFOHeap $ Map.updateMin (Just . tail) inner)
+  push (LIFOHeap inner) (k, a) = LIFOHeap $ Map.insertWith (++) k [(k, a)] inner
 
 
 -- | @findIterate found next initial@ takes an initial seed value and applies
@@ -319,3 +327,9 @@ findIterate :: (a -> Bool) -> (a -> Maybe a) -> a -> Maybe a
 findIterate found next initial
   | found initial = Just initial
   | otherwise = next initial >>= findIterate found next
+
+-- | Use this to mark impossible situations
+bugReport :: String -> a
+bugReport msg = error $
+  msg ++ " This is a bug. Please file an issue at \
+         \https://github.com/devonhollowood/search-algorithms"
