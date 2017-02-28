@@ -1,5 +1,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 
 -- | This module contains a collection of generalized graph search algorithms,
 -- for when you don't want to explicitly represent your data as a graph. The
@@ -127,14 +128,8 @@ dijkstra next solved prunes initial =
   -- This just makes that transformation, then transforms that result into the
   -- desired result from @dijkstra@
   unpack <$>
-  generalizedSearch
-    (emptyLIFOHeap :: LIFOHeap cost (cost, state))
-    snd
-    better
-    next'
-    (solved . snd)
-    (map (. snd) prunes)
-    (0, initial)
+    generalizedSearch emptyLIFOHeap snd better next' (solved . snd)
+      (map (. snd) prunes) (0, initial)
   where
     better [] _ = False
     better _ [] = True
@@ -202,9 +197,9 @@ aStar next found prunes initial =
 -- point in an algorithms execution. The advantage of this abstraction is that
 -- it can be used for things like bidirectional searches, where you want to
 -- stop and start a search part-way through.
-data SearchState f stateKey state = SearchState {
+data SearchState container stateKey state = SearchState {
   current :: state,
-  queue :: f state,
+  queue :: container,
   visited :: Set.Set stateKey,
   paths :: Map.Map stateKey [state]
   }
@@ -256,8 +251,8 @@ nextSearchState better mk_key next prunes old =
 -- at their core the same, with these details substituted. By writing these
 -- searches in terms of this function, we reduce the chances of errors sneaking
 -- into each separate implementation.
-generalizedSearch :: (SearchContainer f state, Ord stateKey) =>
-  f state
+generalizedSearch :: (SearchContainer container state, Ord stateKey) =>
+  container
   -- ^ Empty 'SearchContainer'
   -> (state -> stateKey)
   -- ^ Function to turn a @state@ into a key by which states will be compared
@@ -293,32 +288,32 @@ emptyLIFOHeap = LIFOHeap Map.empty
 
 -- | The 'SearchContainer' class abstracts the idea of a container to be used in
 -- 'generalizedSearch'
-class SearchContainer f a where
-  pop :: f a -> Maybe (a, f a)
-  push :: f a -> a -> f a
+class SearchContainer container elem | container -> elem where
+  pop :: container -> Maybe (elem, container)
+  push :: container -> elem -> container
 
-instance SearchContainer Seq.Seq a where
+instance SearchContainer (Seq.Seq a) a where
   pop s =
     case Seq.viewl s of
       Seq.EmptyL -> Nothing
       (x Seq.:< xs) -> Just (x, xs)
   push s a = s Seq.|> a
 
-instance SearchContainer [] a where
+instance SearchContainer [a] a where
   pop list =
     case list of
       [] -> Nothing
       (x : xs) -> Just (x, xs)
   push list a = a : list
 
-instance Ord k => SearchContainer (LIFOHeap k) (k, a) where
+instance Ord k => SearchContainer (LIFOHeap k a) (k, a) where
   pop (LIFOHeap inner)
     | Map.null inner = Nothing
     | otherwise = case Map.findMin inner of
       (_, []) -> bugReport "Unexpectedly empty heap element."
-      (_, [a]) -> Just (a, LIFOHeap $ Map.deleteMin inner)
-      (_, a : _) -> Just (a, LIFOHeap $ Map.updateMin (Just . tail) inner)
-  push (LIFOHeap inner) (k, a) = LIFOHeap $ Map.insertWith (++) k [(k, a)] inner
+      (k, [a]) -> Just ((k, a), LIFOHeap $ Map.deleteMin inner)
+      (k, a : _) -> Just ((k, a), LIFOHeap $ Map.updateMin (Just . tail) inner)
+  push (LIFOHeap inner) (k, a) = LIFOHeap $ Map.insertWith (++) k [a] inner
 
 
 -- | @findIterate found next initial@ takes an initial seed value and applies
