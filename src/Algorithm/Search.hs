@@ -51,7 +51,10 @@ bfs :: Ord state =>
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-bfs = generalizedSearch Seq.empty id (const . const False)
+bfs =
+  -- BFS is a generalized search using a queue, which directly compares states,
+  -- and which always uses the first path found to a state
+  generalizedSearch Seq.empty id (\_ _ -> False)
 
 
 -- | @dfs next solved prunes initial@ performs a depth-first search over a set
@@ -82,7 +85,10 @@ dfs :: Ord state =>
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-dfs = generalizedSearch [] id (const . const False)
+dfs =
+  -- DFS is a generalized search using a stack, which directly compares states,
+  -- and which always uses the first path found to a state
+  generalizedSearch [] id (\_ _ -> False)
 
 
 -- | @dijkstra next solved prunes initial@ performs a shortest-path search over
@@ -120,13 +126,14 @@ dijkstra :: (Num cost, Ord cost, Ord state) =>
   -- ^ Initial state
   -> Maybe (cost, [(cost, state)])
   -- (Total cost, [(incremental cost, step)]) for the first path found which
+  -- satisfies the given predicate
 dijkstra next solved prunes initial =
-  -- The idea behind this implementation is that Dijkstra's algorithm is really
-  -- just a generalized search, with the search container being a heap (in this
-  -- case a Set), the search key being the original state, and the stored state
-  -- being (cost so far, state).
-  -- This just makes that transformation, then transforms that result into the
-  -- desired result from @dijkstra@
+  -- Dijkstra's algorithm can be viewed as a generalized search, with the search
+  -- container being a heap, with the states being compared without regard to
+  -- cost, with the shorter paths taking precedence over longer ones, and with
+  -- the stored state being (cost so far, state).
+  -- This implementation makes that transformation, then transforms that result
+  -- back into the desired result from @dijkstra@
   unpack <$>
     generalizedSearch emptyLIFOHeap snd better next' (solved . snd)
       (map (. snd) prunes) (0, initial)
@@ -143,7 +150,7 @@ dijkstra next solved prunes initial =
           zip incremental_costs states)
 
 
--- | @aStar next solved prunes initial@ performs a directed search using
+-- | @aStar next solved prunes initial@ performs a best-first search using
 -- the A* search algorithm, starting with the state @initial@, generating
 -- neighboring states, their cost, and an estimate of the remaining cost with
 -- @next@, and pruning out any state for which a function in @prunes@ returns
@@ -177,6 +184,7 @@ aStar :: (Num cost, Ord cost, Ord state) =>
   -- ^ Initial state
   -> Maybe (cost, [(cost, state)])
   -- (Total cost, [(incremental cost, step)]) for the first path found which
+  -- satisfies the given predicate
 aStar next found prunes initial =
   -- The idea of this implementation is that we can use the same machinery as
   -- Dijkstra's algorithm, by changing Dijsktra's cost function to be
