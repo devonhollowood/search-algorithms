@@ -223,36 +223,35 @@ nextSearchState :: (SearchContainer f state, Ord stateKey) =>
   -> [state -> Bool]
   -> SearchState f stateKey state
   -> Maybe (SearchState f stateKey state)
-nextSearchState better mk_key next prunes old =
-  let steps_so_far = paths old Map.! mk_key (current old)
-      new_states = next (current old)
-      (new_queue, new_paths) = List.foldl' (
-        \(q, ps) st ->
-          if mk_key st `Set.member` visited old || any ($ st) prunes
-          then (q, ps)
-          else
-            let q' = push q st
-                ps' = Map.insert (mk_key st) (st : steps_so_far) ps
-            in case Map.lookup (mk_key st) ps of
-              Just old_path ->
-                if better old_path (st : steps_so_far)
-                then (q', ps')
-                else (q, ps)
-              Nothing -> (q', ps')
-        )
-        (queue old, paths old)
-        new_states
-      mk_search_state (new_current, remaining_queue) = SearchState {
-        current = new_current,
-        queue = remaining_queue,
-        visited = Set.insert (mk_key new_current) (visited old),
-        paths = new_paths
-        }
-  in do
-    new_state <- mk_search_state <$> pop new_queue
-    if mk_key (current new_state) `Set.member` visited old
-      then nextSearchState better mk_key next prunes new_state
-      else return new_state
+nextSearchState better mk_key next prunes old = do
+  new_state <- mk_search_state <$> pop new_queue
+  if mk_key (current new_state) `Set.member` visited old
+    then nextSearchState better mk_key next prunes new_state
+    else Just new_state
+  where
+    mk_search_state (new_current, remaining_queue) = SearchState {
+      current = new_current,
+      queue = remaining_queue,
+      visited = Set.insert (mk_key new_current) (visited old),
+      paths = new_paths
+      }
+    new_states = next (current old)
+    (new_queue, new_paths) =
+      List.foldl' update_queue_paths (queue old, paths old) new_states
+    update_queue_paths (old_queue, old_paths) st =
+      if mk_key st `Set.member` visited old || any ($ st) prunes
+      then (old_queue, old_paths)
+      else
+        case Map.lookup (mk_key st) old_paths of
+          Just old_path ->
+            if better old_path (st : steps_so_far)
+            then (q', ps')
+            else (old_queue, old_paths)
+          Nothing -> (q', ps')
+        where
+          steps_so_far = paths old Map.! mk_key (current old)
+          q' = push old_queue st
+          ps' = Map.insert (mk_key st) (st : steps_so_far) old_paths
 
 
 -- | Workhorse simple search algorithm, generalized over search container
