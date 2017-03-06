@@ -99,10 +99,11 @@ dfs =
 -- which @solved@ returns 'True'. Returns 'Nothing' if no path to a solved state
 -- is possible.
 --
--- === Example: Making change problem, with a twist: you only have rare misprint
--- dimes which are really worth $10 each
+-- === Example: Making change problem, with a twist
 --
 -- >>> :{
+-- -- Twist: dimes have a face value of 10 cents, but are actually rare
+-- -- misprints which are worth 10 dollars
 -- countChange target = dijkstra add_one_coin (== target) [(> target)] 0
 --   where
 --     add_one_coin amt =
