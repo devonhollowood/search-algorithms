@@ -14,13 +14,24 @@ main = hspec spec
 cyclicUnweightedGraph :: Map.Map Int [Int]
 cyclicUnweightedGraph = Map.fromList [
   (0, [1, 2, 3]),
-  (1, [4]),
+  (1, [4, 6]),
   (2, [0, 1, 6, 8]),
   (3, [1, 2]),
   (4, [0]),
   (5, [4]),
   (6, [4]),
   (8, [0, 5])
+  ]
+
+-- | Example acyclic directed unweighted graph
+acyclicUnweightedGraph :: Map.Map Int [Int]
+acyclicUnweightedGraph = Map.fromList [
+  (0, [1, 2, 3]),
+  (1, [4]),
+  (2, [5]),
+  (3, [2]),
+  (4, []),
+  (5, [])
   ]
 
 -- | Example cyclic directed weighted graph
@@ -64,6 +75,9 @@ spec = do
     it "returns Nothing when no path is possible" $
       dfs (cyclicUnweightedGraph Map.!) (== 4) [odd, (== 6)] 0
         `shouldBe` Nothing
+    it "handles doubly-inserted nodes" $
+      dfs (acyclicUnweightedGraph Map.!) (==4) [] 0
+        `shouldBe` Just [1, 4]
   describe "dijkstra" $ do
     it "performs dijkstra's algorithm" $
       dijkstra (cyclicWeightedGraph Map.!) (== 'd') [] 'a'
@@ -74,6 +88,9 @@ spec = do
     it "returns Nothing when no path is possible" $
       dijkstra (cyclicWeightedGraph Map.!) (== 'd') [(== 'b'), (== 'c')] 'a'
         `shouldBe` Nothing
+    it "handles zero-length solutions" $
+      dijkstra (cyclicWeightedGraph Map.!) (== 'd') [] 'd'
+        `shouldBe` Just (0, [])
   describe "aStar" $ do
     let start = (0, 0)
         end = (2, 0)

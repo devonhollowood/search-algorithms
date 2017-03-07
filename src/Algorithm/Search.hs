@@ -139,9 +139,6 @@ dijkstra next solved prunes initial =
     generalizedSearch emptyLIFOHeap snd better next' (solved . snd)
       (map (. snd) prunes) (0, initial)
   where
-    better [] _ = False
-    better _ [] = True
-    better ((cost_a, _):_) ((cost_b, _):_) = cost_b < cost_a
     next' (cost, st) = map (\(incr, new_st) -> (incr + cost, new_st)) (next st)
     unpack packed_states =
       let costs = map fst packed_states
@@ -149,6 +146,12 @@ dijkstra next solved prunes initial =
           states = map snd packed_states
       in (if null packed_states then 0 else fst . last $ packed_states,
           zip incremental_costs states)
+    better ((cost_a, _):_) ((cost_b, _):_) = cost_b < cost_a
+    better [] _ = False -- logically this never happens, because if you have a
+                        -- zero-length path a point, you already visited it
+                        -- and thus do not consider other paths to it
+    better _ [] = True  -- logically this never happens, because you cannot find
+                        -- a new zero-length path to a point
 
 
 -- | @aStar next solved prunes initial@ performs a best-first search using
@@ -318,9 +321,10 @@ instance Ord k => SearchContainer (LIFOHeap k a) (k, a) where
   pop (LIFOHeap inner)
     | Map.null inner = Nothing
     | otherwise = case Map.findMin inner of
-      (_, []) -> bugReport "Unexpectedly empty heap element."
       (k, [a]) -> Just ((k, a), LIFOHeap $ Map.deleteMin inner)
       (k, a : _) -> Just ((k, a), LIFOHeap $ Map.updateMin (Just . tail) inner)
+      (_, []) -> pop (LIFOHeap $ Map.deleteMin inner)
+                 -- Logically, this should never happen
   push (LIFOHeap inner) (k, a) = LIFOHeap $ Map.insertWith (++) k [a] inner
 
 
@@ -330,9 +334,3 @@ findIterate :: (a -> Bool) -> (a -> Maybe a) -> a -> Maybe a
 findIterate found next initial
   | found initial = Just initial
   | otherwise = next initial >>= findIterate found next
-
--- | Use this to mark impossible situations
-bugReport :: String -> a
-bugReport msg = error $
-  msg ++ " This is a bug. Please file an issue at \
-         \https://github.com/devonhollowood/search-algorithms"
