@@ -1,5 +1,5 @@
 name:                search-algorithms
-version:             0.1.0.0
+version:             0.1.0
 synopsis:            Common graph search algorithms
 description:         Library containing common graph search algorithms,
                      including depth-first and breadth-first searches,
