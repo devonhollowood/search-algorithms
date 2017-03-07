@@ -87,8 +87,8 @@ dfs :: Ord state =>
   -- such path exists.
 dfs =
   -- DFS is a generalized search using a stack, which directly compares states,
-  -- and which always uses the first path found to a state
-  generalizedSearch [] id (\_ _ -> False)
+  -- and which always uses the most recent path found to a state
+  generalizedSearch [] id (\_ _ -> True)
 
 
 -- | @dijkstra next solved prunes initial@ performs a shortest-path search over

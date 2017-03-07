@@ -57,7 +57,7 @@ spec = do
   describe "dfs" $ do
     it "performs depth-first search" $
       dfs (cyclicUnweightedGraph Map.!) (== 4) [] 0
-        `shouldBe` Just [2, 8, 5, 4]
+        `shouldBe` Just [3, 2, 8, 5, 4]
     it "handles pruning" $
       dfs (cyclicUnweightedGraph Map.!) (== 4) [odd] 0
         `shouldBe` Just [2, 6, 4]
