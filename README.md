@@ -1,9 +1,10 @@
 # search-algorithms
 Haskell library containing common graph search algorithms
 
-Lots of problems can be modeled as graphs, but oftentimes we don't want to make an actual graph structure to represent the problem. Perhaps the graph is too big (or infinite), or maybe making an explicit graph is just unwieldy for the problem at hand. That's where this library comes in: this is a collection of generalized search algorithms, so that you don't have to make the graphs explicit! Examples:
+Lots of problems can be modeled as graphs, but oftentimes one doesn't want to use an explicit graph structure to represent the problem. Maybe the graph would be too big (or is infinite), maybe making an explicit graph is unwieldy for the problem at hand, or maybe one just wants to generalize over graph implementations. That's where this library comes in: this is a collection of generalized search algorithms, so that one doesn't have to make the graphs explicit. In general, this means that one provides each search function with a function to generate neighboring states, a predicate which tells when the search is complete, a list of predicates which tell whether a "dead end" has been reached, and an initial state to start from. The result is a path from the initial state to a "solved" state, or `Nothing` if no such path is possible.
 
-## Change-making problem
+## Examples
+### Change-making problem
 ```haskell
 import Algorithm.Search (bfs)
 
@@ -17,7 +18,7 @@ countChange target = bfs add_one_coin (== target) [(> target)] 0
 -- Just [1, 2, 7, 17, 42, 67]
 ```
 
-## Simple directed acyclic graph:
+### Simple directed acyclic graph:
 ```haskell
 import Algorithm.Search (dfs)
 import qualified Data.Map as Map
@@ -34,7 +35,7 @@ graph = Map.fromList [
 -- Just [3,4]
 ```
 
-## Using A* to find a path in an area with a wall:
+### Using A* to find a path in an area with a wall:
 ```haskell
 import Algorithm.Search (aStar)
 
