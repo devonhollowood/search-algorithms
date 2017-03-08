@@ -5,6 +5,9 @@ Haskell library containing common graph search algorithms
 
 Lots of problems can be modeled as graphs, but oftentimes one doesn't want to use an explicit graph structure to represent the problem. Maybe the graph would be too big (or is infinite), maybe making an explicit graph is unwieldy for the problem at hand, or maybe one just wants to generalize over graph implementations. That's where this library comes in: this is a collection of generalized search algorithms, so that one doesn't have to make the graphs explicit. In general, this means that one provides each search function with a function to generate neighboring states, a list of predicates which tell whether a "dead end" has been reached, a predicate which tells when the search is complete, and an initial state to start from. The result is a path from the initial state to a "solved" state, or `Nothing` if no such path is possible.
 
+## Documentation
+Documentation is hosted on [Hackage](http://hackage.haskell.org/package/search-algorithms).
+
 ## Examples
 ### Change-making problem
 ```haskell
