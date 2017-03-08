@@ -10,7 +10,7 @@ Lots of problems can be modeled as graphs, but oftentimes one doesn't want to us
 ```haskell
 import Algorithm.Search (bfs)
 
-countChange target = bfs add_one_coin (== target) [(> target)] 0
+countChange target = bfs add_one_coin [(> target)] (== target) 0
   where
     add_one_coin amt = map (+ amt) coins
     coins = [1, 5, 10, 25]
@@ -33,7 +33,7 @@ graph = Map.fromList [
   ]
 
 -- Run dfs on the graph:
--- >>> dfs (graph Map.!) (== 4) [] 1
+-- >>> dfs [] (graph Map.!) (== 4) 1
 -- Just [3,4]
 ```
 
@@ -55,7 +55,7 @@ findPath start end =
   let next =
         map (\pt -> (1, taxicabDistance pt end, pt))
         . taxicabNeighbors
-  in aStar next (== end) [isWall] start
+  in aStar next [isWall] (== end) start
 
 -- findPath p1 p2 finds a path between p1 and p2, avoiding the wall
 -- >>> findPath (0, 0) (2, 0)

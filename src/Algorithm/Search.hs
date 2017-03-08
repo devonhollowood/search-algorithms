@@ -20,16 +20,16 @@ import qualified Data.Set as Set
 import qualified Data.List as List
 
 
--- | @bfs next solved prunes initial@ performs a breadth-first search over a set
+-- | @bfs next prunes found initial@ performs a breadth-first search over a set
 -- of states, starting with @initial@, generating neighboring states with
 -- @next@, and pruning out any state for which a function in @prunes@ returns
--- 'True'. It returns a path to a state for which @solved@ returns 'True'.
+-- 'True'. It returns a path to a state for which @found@ returns 'True'.
 -- Returns 'Nothing' if no path is possible.
 --
 -- === Example: Making change problem
 --
 -- >>> :{
--- countChange target = bfs add_one_coin (== target) [(> target)] 0
+-- countChange target = bfs add_one_coin [(> target)] (== target) 0
 --   where
 --     add_one_coin amt = map (+ amt) coins
 --     coins = [25, 10, 5, 1]
@@ -40,12 +40,12 @@ import qualified Data.List as List
 bfs :: Ord state =>
   (state -> [state])
   -- ^ Function to generate "next" states given a current state
-  -> (state -> Bool)
-  -- ^ Predicate to determine if solution found. 'bfs' returns a path to the
-  -- first state for which this predicate returns 'True'.
   -> [state -> Bool]
   -- ^ List of ways to prune search. These are predicates which, if 'True', are
   -- considered to indicate a "dead end".
+  -> (state -> Bool)
+  -- ^ Predicate to determine if solution found. 'bfs' returns a path to the
+  -- first state for which this predicate returns 'True'.
   -> state
   -- ^ Initial state
   -> Maybe [state]
@@ -57,10 +57,10 @@ bfs =
   generalizedSearch Seq.empty id (\_ _ -> False)
 
 
--- | @dfs next solved prunes initial@ performs a depth-first search over a set
+-- | @dfs next prunes found initial@ performs a depth-first search over a set
 -- of states, starting with @initial@, generating neighboring states with
 -- @next@, and pruning out any state for which a function in @prunes@ returns
--- 'True'. It returns a depth-first path to a state for which @solved@
+-- 'True'. It returns a depth-first path to a state for which @found@
 -- returns 'True'. Returns 'Nothing' if no path is possible.
 --
 -- === Example: Simple directed graph search
@@ -69,17 +69,17 @@ bfs =
 --
 -- >>> graph = Map.fromList [(1, [2, 3]), (2, [4]), (3, [4]), (4, [])]
 --
--- >>> dfs (graph Map.!) (== 4) [] 1
+-- >>> dfs (graph Map.!) [] (== 4) 1
 -- Just [3,4]
 dfs :: Ord state =>
   (state -> [state])
   -- ^ Function to generate "next" states given a current state
-  -> (state -> Bool)
-  -- ^ Predicate to determine if solution found. 'dfs' returns a path to the
-  -- first state for which this predicate returns 'True'.
   -> [state -> Bool]
   -- ^ List of ways to prune search. These are predicates which, if 'True', are
   -- considered to indicate a "dead end".
+  -> (state -> Bool)
+  -- ^ Predicate to determine if solution found. 'dfs' returns a path to the
+  -- first state for which this predicate returns 'True'.
   -> state
   -- ^ Initial state
   -> Maybe [state]
@@ -91,12 +91,12 @@ dfs =
   generalizedSearch [] id (\_ _ -> True)
 
 
--- | @dijkstra next solved prunes initial@ performs a shortest-path search over
+-- | @dijkstra next prunes found initial@ performs a shortest-path search over
 -- a set of states using Dijkstra's algorithm, starting with @initial@,
 -- generating neighboring states and their incremental costs with @next@, and
 -- pruning out any state for which a function in @prunes@ returns 'True'.
 -- This will find the least-costly path from an initial state to a state for
--- which @solved@ returns 'True'. Returns 'Nothing' if no path to a solved state
+-- which @found@ returns 'True'. Returns 'Nothing' if no path to a solved state
 -- is possible.
 --
 -- === Example: Making change problem, with a twist
@@ -104,7 +104,7 @@ dfs =
 -- >>> :{
 -- -- Twist: dimes have a face value of 10 cents, but are actually rare
 -- -- misprints which are worth 10 dollars
--- countChange target = dijkstra add_one_coin (== target) [(> target)] 0
+-- countChange target = dijkstra add_one_coin [(> target)] (== target) 0
 --   where
 --     add_one_coin amt =
 --       map (\(true_val, face_val) -> (true_val, face_val + amt)) coin_values
@@ -117,18 +117,18 @@ dijkstra :: (Num cost, Ord cost, Ord state) =>
   (state -> [(cost, state)])
   -- ^ Function to generate list of incremental cost and neighboring states
   -- given the current state
-  -> (state -> Bool)
-  -- ^ Predicate to determine if solution found. 'dijkstra' returns the shortest
-  -- path to the first state for which this predicate returns 'True'.
   -> [state -> Bool]
   -- ^ List of ways to prune search. These are predicates which, if 'True', are
   -- considered to indicate a "dead end".
+  -> (state -> Bool)
+  -- ^ Predicate to determine if solution found. 'dijkstra' returns the shortest
+  -- path to the first state for which this predicate returns 'True'.
   -> state
   -- ^ Initial state
   -> Maybe (cost, [(cost, state)])
   -- (Total cost, [(incremental cost, step)]) for the first path found which
   -- satisfies the given predicate
-dijkstra next solved prunes initial =
+dijkstra next prunes found initial =
   -- Dijkstra's algorithm can be viewed as a generalized search, with the search
   -- container being a heap, with the states being compared without regard to
   -- cost, with the shorter paths taking precedence over longer ones, and with
@@ -136,8 +136,8 @@ dijkstra next solved prunes initial =
   -- This implementation makes that transformation, then transforms that result
   -- back into the desired result from @dijkstra@
   unpack <$>
-    generalizedSearch emptyLIFOHeap snd better next' (solved . snd)
-      (map (. snd) prunes) (0, initial)
+    generalizedSearch emptyLIFOHeap snd better next' (map (. snd) prunes)
+      (found . snd) (0, initial)
   where
     next' (cost, st) = map (\(incr, new_st) -> (incr + cost, new_st)) (next st)
     unpack packed_states =
@@ -154,14 +154,14 @@ dijkstra next solved prunes initial =
                         -- a new zero-length path to a point
 
 
--- | @aStar next solved prunes initial@ performs a best-first search using
+-- | @aStar next prunes found initial@ performs a best-first search using
 -- the A* search algorithm, starting with the state @initial@, generating
 -- neighboring states, their cost, and an estimate of the remaining cost with
 -- @next@, and pruning out any state for which a function in @prunes@ returns
--- 'True'. This returns a path to a state for which @solved@ returns 'True'.
+-- 'True'. This returns a path to a state for which @found@ returns 'True'.
 -- If the estimate is strictly a lower bound on the remaining cost to reach a
--- @solved@ state, then the returned path is the shortest path. Returns
--- 'Nothing' if no path to a @solved@ state is possible.
+-- solved state, then the returned path is the shortest path. Returns
+-- 'Nothing' if no path to a solved state is possible.
 --
 -- === Example: Path finding in taxicab geometry
 --
@@ -171,32 +171,32 @@ dijkstra next solved prunes initial =
 -- nextTowards dest pos = map (\p -> (1, dist p dest, p)) (neighbors pos)
 -- :}
 --
--- >>> aStar (nextTowards (0, 2)) (== (0, 2)) [(== (0, 1))] (0, 0)
+-- >>> aStar (nextTowards (0, 2)) [(== (0, 1))] (== (0, 2)) (0, 0)
 -- Just (4,[(1,(1,0)),(1,(1,1)),(1,(1,2)),(1,(0,2))])
 aStar :: (Num cost, Ord cost, Ord state) =>
   (state -> [(cost, cost, state)])
   -- ^ Function which, when given the current state, produces a list whose
   -- elements are (incremental cost to reach neighboring state,
   -- estimate on remaining cost from said state, said state).
-  -> (state -> Bool)
-  -- ^ Predicate to determine if solution found. 'aStar' returns the shortest
-  -- path to the first state for which this predicate returns 'True'.
   -> [state -> Bool]
   -- ^ List of ways to prune search. These are predicates which, if 'True', are
   -- considered to indicate a "dead end".
+  -> (state -> Bool)
+  -- ^ Predicate to determine if solution found. 'aStar' returns the shortest
+  -- path to the first state for which this predicate returns 'True'.
   -> state
   -- ^ Initial state
   -> Maybe (cost, [(cost, state)])
   -- (Total cost, [(incremental cost, step)]) for the first path found which
   -- satisfies the given predicate
-aStar next found prunes initial =
+aStar next prunes found initial =
   -- The idea of this implementation is that we can use the same machinery as
   -- Dijkstra's algorithm, by changing Dijsktra's cost function to be
   -- (incremental cost + lower bound remaining cost). We'd still like to be able
   -- to return the list of incremental costs, so we modify the internal state to
   -- be (incremental cost to state, state). Then at the end we undo this
   -- transformation
-  unpack <$> dijkstra next' (found . snd) (map (. snd) prunes) (0, initial)
+  unpack <$> dijkstra next' (map (. snd) prunes) (found . snd) (0, initial)
   where
     next' (_, st) = map pack (next st)
     pack (incr, est, new_st) = (incr + est, (incr, new_st))
@@ -274,21 +274,21 @@ generalizedSearch :: (SearchContainer container state, Ord stateKey) =>
   -- old and should thus be inserted
   -> (state -> [state])
   -- ^ Function to generate "next" states given a current state
-  -> (state -> Bool)
-  -- ^ Predicate to determine if solution found. 'search' returns a path to the
-  -- first state for which this predicate returns 'True'.
   -> [state -> Bool]
   -- ^ List of ways to prune search. These are predicates which, if 'True', are
   -- considered to indicate a "dead end".
+  -> (state -> Bool)
+  -- ^ Predicate to determine if solution found. 'search' returns a path to the
+  -- first state for which this predicate returns 'True'.
   -> state
   -- ^ Initial state
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-generalizedSearch empty mk_key better next solved prunes initial =
+generalizedSearch empty mk_key better next prunes found initial =
   let get_steps search_st = paths search_st Map.! mk_key (current search_st)
   in fmap (reverse . get_steps)
-     . findIterate (solved . current) (nextSearchState better mk_key next prunes)
+     . findIterate (nextSearchState better mk_key next prunes) (found . current)
      $ SearchState initial empty (Set.singleton $ mk_key initial)
        (Map.singleton (mk_key initial) [])
 
@@ -330,7 +330,7 @@ instance Ord k => SearchContainer (LIFOHeap k a) (k, a) where
 
 -- | @findIterate found next initial@ takes an initial seed value and applies
 -- @next@ to it until either @found@ returns True or @next@ returns @Nothing@
-findIterate :: (a -> Bool) -> (a -> Maybe a) -> a -> Maybe a
-findIterate found next initial
+findIterate :: (a -> Maybe a) -> (a -> Bool) -> a -> Maybe a
+findIterate next found initial
   | found initial = Just initial
-  | otherwise = next initial >>= findIterate found next
+  | otherwise = next initial >>= findIterate next found
