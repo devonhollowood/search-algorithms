@@ -37,8 +37,8 @@ import qualified Data.List as List
 --
 -- >>> countChange 67
 -- Just [25,50,60,65,66,67]
-bfs :: Ord state =>
-  (state -> [state])
+bfs :: (Foldable f, Ord state)
+  => (state -> f state)
   -- ^ Function to generate "next" states given a current state
   -> [state -> Bool]
   -- ^ List of ways to prune search. These are predicates which, if 'True', are
@@ -71,8 +71,8 @@ bfs =
 --
 -- >>> dfs (graph Map.!) [] (== 4) 1
 -- Just [3,4]
-dfs :: Ord state =>
-  (state -> [state])
+dfs :: (Foldable f, Ord state)
+  => (state -> f state)
   -- ^ Function to generate "next" states given a current state
   -> [state -> Bool]
   -- ^ List of ways to prune search. These are predicates which, if 'True', are
@@ -113,8 +113,8 @@ dfs =
 --
 -- >>> countChange 67
 -- Just (67,[(1,1),(1,2),(5,7),(5,12),(5,17),(25,42),(25,67)])
-dijkstra :: (Num cost, Ord cost, Ord state) =>
-  (state -> [(cost, state)])
+dijkstra :: (Foldable f, Functor f, Num cost, Ord cost, Ord state)
+  => (state -> f (cost, state))
   -- ^ Function to generate list of incremental cost and neighboring states
   -- given the current state
   -> [state -> Bool]
@@ -139,7 +139,7 @@ dijkstra next prunes found initial =
     generalizedSearch emptyLIFOHeap snd better next' (map (. snd) prunes)
       (found . snd) (0, initial)
   where
-    next' (cost, st) = map (\(incr, new_st) -> (incr + cost, new_st)) (next st)
+    next' (cost, st) = fmap (\(incr, new_st) -> (incr + cost, new_st)) (next st)
     unpack packed_states =
       let costs = map fst packed_states
           incremental_costs = zipWith (-) costs (0:costs)
@@ -173,8 +173,8 @@ dijkstra next prunes found initial =
 --
 -- >>> aStar (nextTowards (0, 2)) [(== (0, 1))] (== (0, 2)) (0, 0)
 -- Just (4,[(1,(1,0)),(1,(1,1)),(1,(1,2)),(1,(0,2))])
-aStar :: (Num cost, Ord cost, Ord state) =>
-  (state -> [(cost, cost, state)])
+aStar :: (Foldable f, Functor f, Num cost, Ord cost, Ord state)
+  => (state -> f (cost, cost, state))
   -- ^ Function which, when given the current state, produces a list whose
   -- elements are (incremental cost to reach neighboring state,
   -- estimate on remaining cost from said state, said state).
@@ -198,7 +198,7 @@ aStar next prunes found initial =
   -- transformation
   unpack <$> dijkstra next' (map (. snd) prunes) (found . snd) (0, initial)
   where
-    next' (_, st) = map pack (next st)
+    next' (_, st) = fmap pack (next st)
     pack (incr, est, new_st) = (incr + est, (incr, new_st))
     unpack (_, packed_states) =
       let unpacked_states = map snd packed_states
@@ -219,13 +219,14 @@ data SearchState container stateKey state = SearchState {
 
 -- | 'nextSearchState' moves from one 'searchState' to the next in the
 -- generalized search algorithm
-nextSearchState :: (SearchContainer f state, Ord stateKey) =>
-  ([state] -> [state] -> Bool)
+nextSearchState ::
+  (Foldable f, SearchContainer container state, Ord stateKey)
+  => ([state] -> [state] -> Bool)
   -> (state -> stateKey)
-  -> (state -> [state])
+  -> (state -> f state)
   -> [state -> Bool]
-  -> SearchState f stateKey state
-  -> Maybe (SearchState f stateKey state)
+  -> SearchState container stateKey state
+  -> Maybe (SearchState container stateKey state)
 nextSearchState better mk_key next prunes old = do
   new_state <- mk_search_state <$> pop new_queue
   if mk_key (current new_state) `Set.member` visited old
@@ -262,8 +263,9 @@ nextSearchState better mk_key next prunes old = do
 -- at their core the same, with these details substituted. By writing these
 -- searches in terms of this function, we reduce the chances of errors sneaking
 -- into each separate implementation.
-generalizedSearch :: (SearchContainer container state, Ord stateKey) =>
-  container
+generalizedSearch ::
+  (Foldable f, SearchContainer container state, Ord stateKey)
+  => container
   -- ^ Empty 'SearchContainer'
   -> (state -> stateKey)
   -- ^ Function to turn a @state@ into a key by which states will be compared
@@ -272,7 +274,7 @@ generalizedSearch :: (SearchContainer container state, Ord stateKey) =>
   -- ^ Function @better old new@, which when given a choice between an @old@ and
   -- a @new@ path to a state, returns True when @new@ is a "better" path than
   -- old and should thus be inserted
-  -> (state -> [state])
+  -> (state -> f state)
   -- ^ Function to generate "next" states given a current state
   -> [state -> Bool]
   -- ^ List of ways to prune search. These are predicates which, if 'True', are
