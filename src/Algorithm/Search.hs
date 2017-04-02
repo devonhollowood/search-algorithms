@@ -11,14 +11,14 @@ module Algorithm.Search (
   bfs,
   dfs,
   dijkstra,
-  aStar
+  aStar,
+  incrementalCosts
   ) where
 
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.List as List
-
 
 -- | @bfs next prunes found initial@ performs a breadth-first search over a set
 -- of states, starting with @initial@, generating neighboring states with
@@ -104,19 +104,25 @@ dfs =
 -- >>> :{
 -- -- Twist: dimes have a face value of 10 cents, but are actually rare
 -- -- misprints which are worth 10 dollars
--- countChange target = dijkstra add_one_coin [(> target)] (== target) 0
+-- countChange target = dijkstra add_coin true_cost [(> target)] (== target) 0
 --   where
---     add_one_coin amt =
---       map (\(true_val, face_val) -> (true_val, face_val + amt)) coin_values
---     coin_values = [(25, 25), (1000, 10), (5, 5), (1, 1)]
+--     coin_values = [(25, 25), (10, 1000), (5, 5), (1, 1)]
+--     add_coin amt = map ((+ amt) . snd) coin_values
+--     true_cost low high =
+--       case lookup (high - low) coin_values of
+--         Just val -> val
+--         Nothing -> error $ "invalid costs: " ++ show high ++ ", " ++ show low
 -- :}
 --
 -- >>> countChange 67
--- Just (67,[(1,1),(1,2),(5,7),(5,12),(5,17),(25,42),(25,67)])
+-- Just (67,[1,2,7,12,17,42,67])
 dijkstra :: (Foldable f, Functor f, Num cost, Ord cost, Ord state)
-  => (state -> f (cost, state))
-  -- ^ Function to generate list of incremental cost and neighboring states
-  -- given the current state
+  => (state -> f state)
+  -- ^ Function to generate list of neighboring states given the current state
+  -> (state -> state -> cost)
+  -- ^ Function to generate list of costs between neighboring states. This is
+  -- only called for adjacent states, so it is safe to have this function be
+  -- partial for non-neighboring states.
   -> [state -> Bool]
   -- ^ List of ways to prune search. These are predicates which, if 'True', are
   -- considered to indicate a "dead end".
@@ -125,10 +131,10 @@ dijkstra :: (Foldable f, Functor f, Num cost, Ord cost, Ord state)
   -- path to the first state for which this predicate returns 'True'.
   -> state
   -- ^ Initial state
-  -> Maybe (cost, [(cost, state)])
+  -> Maybe (cost, [state])
   -- (Total cost, [(incremental cost, step)]) for the first path found which
   -- satisfies the given predicate
-dijkstra next prunes found initial =
+dijkstra next cost prunes found initial =
   -- Dijkstra's algorithm can be viewed as a generalized search, with the search
   -- container being a heap, with the states being compared without regard to
   -- cost, with the shorter paths taking precedence over longer ones, and with
@@ -136,22 +142,13 @@ dijkstra next prunes found initial =
   -- This implementation makes that transformation, then transforms that result
   -- back into the desired result from @dijkstra@
   unpack <$>
-    generalizedSearch emptyLIFOHeap snd better next' (map (. snd) prunes)
+    generalizedSearch emptyLIFOHeap snd leastCostly next' (map (. snd) prunes)
       (found . snd) (0, initial)
   where
-    next' (cost, st) = fmap (\(incr, new_st) -> (incr + cost, new_st)) (next st)
-    unpack packed_states =
-      let costs = map fst packed_states
-          incremental_costs = zipWith (-) costs (0:costs)
-          states = map snd packed_states
-      in (if null packed_states then 0 else fst . last $ packed_states,
-          zip incremental_costs states)
-    better ((cost_a, _):_) ((cost_b, _):_) = cost_b < cost_a
-    better [] _ = False -- logically this never happens, because if you have a
-                        -- zero-length path a point, you already visited it
-                        -- and thus do not consider other paths to it
-    better _ [] = True  -- logically this never happens, because you cannot find
-                        -- a new zero-length path to a point
+    next' (old_cost, st) =
+      fmap (\new_st -> (cost st new_st + old_cost, new_st)) (next st)
+    unpack [] = (0, [])
+    unpack packed_states = (fst . last $ packed_states, map snd packed_states)
 
 
 -- | @aStar next prunes found initial@ performs a best-first search using
@@ -168,16 +165,21 @@ dijkstra next prunes found initial =
 -- >>> :{
 -- neighbors (x, y) = [(x, y + 1), (x - 1, y), (x + 1, y), (x, y - 1)]
 -- dist (x1, y1) (x2, y2) = abs (y2 - y1) + abs (x2 - x1)
--- nextTowards dest pos = map (\p -> (1, dist p dest, p)) (neighbors pos)
 -- :}
 --
--- >>> aStar (nextTowards (0, 2)) [(== (0, 1))] (== (0, 2)) (0, 0)
--- Just (4,[(1,(1,0)),(1,(1,1)),(1,(1,2)),(1,(0,2))])
+-- >>> aStar neighbors dist (dist (0,2)) [(== (0, 1))] (== (0, 2)) (0, 0)
+-- Just (4,[(1,0),(1,1),(1,2),(0,2)])
 aStar :: (Foldable f, Functor f, Num cost, Ord cost, Ord state)
-  => (state -> f (cost, cost, state))
+  => (state -> f state)
   -- ^ Function which, when given the current state, produces a list whose
   -- elements are (incremental cost to reach neighboring state,
   -- estimate on remaining cost from said state, said state).
+  -> (state -> state -> cost)
+  -- ^ Function to generate list of costs between neighboring states. This is
+  -- only called for adjacent states, so it is safe to have this function be
+  -- partial for non-neighboring states.
+  -> (state -> cost)
+  -- ^ Estimate on remaining cost given a state
   -> [state -> Bool]
   -- ^ List of ways to prune search. These are predicates which, if 'True', are
   -- considered to indicate a "dead end".
@@ -186,23 +188,68 @@ aStar :: (Foldable f, Functor f, Num cost, Ord cost, Ord state)
   -- path to the first state for which this predicate returns 'True'.
   -> state
   -- ^ Initial state
-  -> Maybe (cost, [(cost, state)])
+  -> Maybe (cost, [state])
   -- (Total cost, [(incremental cost, step)]) for the first path found which
   -- satisfies the given predicate
-aStar next prunes found initial =
+aStar next cost remaining prunes found initial =
   -- The idea of this implementation is that we can use the same machinery as
   -- Dijkstra's algorithm, by changing Dijsktra's cost function to be
   -- (incremental cost + lower bound remaining cost). We'd still like to be able
   -- to return the list of incremental costs, so we modify the internal state to
   -- be (incremental cost to state, state). Then at the end we undo this
   -- transformation
-  unpack <$> dijkstra next' (map (. snd) prunes) (found . snd) (0, initial)
+  unpack <$> generalizedSearch emptyLIFOHeap snd2 leastCostly next'
+    (map (. snd2) prunes) (found . snd2) (remaining initial, (0, initial))
   where
-    next' (_, st) = fmap pack (next st)
-    pack (incr, est, new_st) = (incr + est, (incr, new_st))
-    unpack (_, packed_states) =
-      let unpacked_states = map snd packed_states
-      in (sum (map fst unpacked_states), unpacked_states)
+    next' (_, (old_cost, old_st)) = fmap update_state (next old_st)
+      where
+        update_state new_st =
+          let new_cost = old_cost + cost old_st new_st
+              new_est = new_cost + remaining new_st
+          in (new_est, (new_cost, new_st))
+    unpack [] = (0, [])
+    unpack packed_states =
+      (fst . snd . last $ packed_states, map snd2 packed_states)
+    snd2 = snd . snd
+
+
+-- | @incrementalCosts cost_fn states@ gives a list of the incremental costs
+-- | going from state to state along the path given in @states@, using the cost
+-- | function given by @cost_fn@. Note that the paths returned by the searches
+-- | in this module do not include the initial state, so if you want the
+-- | incremental costs along a @path@ returned by one of these searches, you
+-- | want to use @incrementalCosts cost_fn (initial : path)@.
+--
+-- === Example: Getting incremental costs from dijkstra
+--
+-- >>> import Data.Maybe (fromJust)
+--
+-- >>> :{
+-- cyclicWeightedGraph :: Map.Map Char [(Char, Int)]
+-- cyclicWeightedGraph = Map.fromList [
+--   ('a', [('b', 1), ('c', 2)]),
+--   ('b', [('a', 1), ('c', 2), ('d', 5)]),
+--   ('c', [('a', 1), ('d', 2)]),
+--   ('d', [])
+--   ]
+-- start = (0, 0)
+-- end = (0, 2)
+-- cost a b = fromJust . lookup b $ cyclicWeightedGraph Map.! a
+-- :}
+--
+-- >>> incrementalCosts cost ['a', 'b', 'd']
+-- [1,5]
+incrementalCosts ::
+  (state -> state -> cost)
+  -- ^ Function to generate list of costs between neighboring states. This is
+  -- only called for adjacent states in the `states` list, so it is safe to have
+  -- this function be partial for non-neighboring states.
+  -> [state]
+  -- ^ A path, given as a list of adjacent states, along which to find the
+  -- incremental costs
+  -> [cost]
+  -- ^ List of incremental costs along given path
+incrementalCosts cost_fn states = zipWith cost_fn states (tail states)
 
 
 -- | A 'SearchState' represents the state of a generalized search at a given
@@ -336,3 +383,18 @@ findIterate :: (a -> Maybe a) -> (a -> Bool) -> a -> Maybe a
 findIterate next found initial
   | found initial = Just initial
   | otherwise = next initial >>= findIterate next found
+
+
+-- | @leastCostly paths_a paths_b@ is a utility function to be used with
+-- 'dijkstra'-like functions. It returns True when the cost of @paths_a@
+-- is less than the cost of @paths_b@, where the total costs are the first
+-- elements in each tuple in each path
+leastCostly :: Ord a => [(a, b)] -> [(a, b)] -> Bool
+leastCostly ((cost_a, _):_) ((cost_b, _):_) = cost_b < cost_a
+-- logically this never happens, because if you have a
+-- zero-length path a point, you already visited it
+-- and thus do not consider other paths to it
+leastCostly [] _ = False
+-- logically this never happens, because you cannot find
+-- a new zero-length path to a point
+leastCostly _ [] = True

@@ -55,14 +55,14 @@ taxicabDistance (x1, y1) (x2, y2) = abs (x2 - x1) + abs (y2 - y1)
 
 findPath :: (Int, Int) -> (Int, Int) -> Maybe (Int, [(Int, (Int, Int))])
 findPath start end =
-  let next =
-        map (\pt -> (1, taxicabDistance pt end, pt))
-        . taxicabNeighbors
-  in aStar next [isWall] (== end) start
+  let next = taxicabNeighbors
+      cost = taxicabDistance
+      remaining = (taxicabDistance end)
+  in aStar next cost remaining [isWall] (== end) start
 
 -- findPath p1 p2 finds a path between p1 and p2, avoiding the wall
 -- >>> findPath (0, 0) (2, 0)
--- Just (6,[(1,(0,1)),(1,(0,2)),(1,(1,2)),(1,(2,2)),(1,(2,1)),(1,(2,0))])
+-- Just (6,[(0,1),(0,2),(1,2),(2,2),(2,1),(2,0)])
 --
 -- This correctly goes up and around the wall
 ```
