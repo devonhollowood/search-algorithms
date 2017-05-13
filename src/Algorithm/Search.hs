@@ -1,6 +1,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- | This module contains a collection of generalized graph search algorithms,
 -- for when you don't want to explicitly represent your data as a graph. The
@@ -299,7 +299,7 @@ data SearchState container stateKey state = SearchState {
 -- | 'nextSearchState' moves from one 'searchState' to the next in the
 -- generalized search algorithm
 nextSearchState ::
-  (Foldable f, SearchContainer container state, Ord stateKey)
+  (Foldable f, SearchContainer container, Ord stateKey, Elem container ~ state)
   => ([state] -> [state] -> Bool)
   -> (state -> stateKey)
   -> (state -> f state)
@@ -342,7 +342,7 @@ nextSearchState better mk_key next old = do
 -- searches in terms of this function, we reduce the chances of errors sneaking
 -- into each separate implementation.
 generalizedSearch ::
-  (Foldable f, SearchContainer container state, Ord stateKey)
+  (Foldable f, SearchContainer container, Ord stateKey, Elem container ~ state)
   => container
   -- ^ Empty 'SearchContainer'
   -> (state -> stateKey)
@@ -376,25 +376,29 @@ emptyLIFOHeap = LIFOHeap Map.empty
 
 -- | The 'SearchContainer' class abstracts the idea of a container to be used in
 -- 'generalizedSearch'
-class SearchContainer container elem | container -> elem where
-  pop :: container -> Maybe (elem, container)
-  push :: container -> elem -> container
+class SearchContainer container where
+  type Elem container
+  pop :: container -> Maybe (Elem container, container)
+  push :: container -> Elem container -> container
 
-instance SearchContainer (Seq.Seq a) a where
+instance SearchContainer (Seq.Seq a) where
+  type Elem (Seq.Seq a) = a
   pop s =
     case Seq.viewl s of
       Seq.EmptyL -> Nothing
       (x Seq.:< xs) -> Just (x, xs)
   push s a = s Seq.|> a
 
-instance SearchContainer [a] a where
+instance SearchContainer [a] where
+  type Elem [a] = a
   pop list =
     case list of
       [] -> Nothing
       (x : xs) -> Just (x, xs)
   push list a = a : list
 
-instance Ord k => SearchContainer (LIFOHeap k a) (k, a) where
+instance Ord k => SearchContainer (LIFOHeap k a) where
+  type Elem (LIFOHeap k a) = (k, a)
   pop (LIFOHeap inner)
     | Map.null inner = Nothing
     | otherwise = case Map.findMin inner of
