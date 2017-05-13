@@ -110,7 +110,7 @@ dfs =
 --
 -- >>> countChange 67
 -- Just (67,[1,2,7,12,17,42,67])
-dijkstra :: (Foldable f, Functor f, Num cost, Ord cost, Ord state)
+dijkstra :: (Foldable f, Num cost, Ord cost, Ord state)
   => (state -> f state)
   -- ^ Function to generate list of neighboring states given the current state
   -> (state -> state -> cost)
@@ -137,7 +137,8 @@ dijkstra next cost found initial =
       (0, initial)
   where
     next' (old_cost, st) =
-      fmap (\new_st -> (cost st new_st + old_cost, new_st)) (next st)
+      (\new_st -> (cost st new_st + old_cost, new_st))
+        <$> Foldable.toList (next st)
     unpack [] = (0, [])
     unpack packed_states = (fst . last $ packed_states, map snd packed_states)
 
@@ -162,7 +163,7 @@ dijkstra next cost found initial =
 --
 -- >>> aStar (neighbors `pruning` isWall) dist (dist end) (== end) start
 -- Just (4,[(1,0),(1,1),(1,2),(0,2)])
-aStar :: (Foldable f, Functor f, Num cost, Ord cost, Ord state)
+aStar :: (Foldable f, Num cost, Ord cost, Ord state)
   => (state -> f state)
   -- ^ Function which, when given the current state, produces a list whose
   -- elements are (incremental cost to reach neighboring state,
@@ -191,7 +192,8 @@ aStar next cost remaining found initial =
   unpack <$> generalizedSearch emptyLIFOHeap snd2 leastCostly next'
     (found . snd2) (remaining initial, (0, initial))
   where
-    next' (_, (old_cost, old_st)) = fmap update_state (next old_st)
+    next' (_, (old_cost, old_st)) =
+      update_state <$> Foldable.toList (next old_st)
       where
         update_state new_st =
           let new_cost = old_cost + cost old_st new_st
