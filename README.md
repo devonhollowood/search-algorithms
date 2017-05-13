@@ -3,17 +3,21 @@ Haskell library containing common graph search algorithms
 
 [![Build Status](https://travis-ci.org/devonhollowood/search-algorithms.svg?branch=master)](https://travis-ci.org/devonhollowood/search-algorithms)
 
-Lots of problems can be modeled as graphs, but oftentimes one doesn't want to use an explicit graph structure to represent the problem. Maybe the graph would be too big (or is infinite), maybe making an explicit graph is unwieldy for the problem at hand, or maybe one just wants to generalize over graph implementations. That's where this library comes in: this is a collection of generalized search algorithms, so that one doesn't have to make the graphs explicit. In general, this means that one provides each search function with a function to generate neighboring states, a list of predicates which tell whether a "dead end" has been reached, a predicate which tells when the search is complete, and an initial state to start from. The result is a path from the initial state to a "solved" state, or `Nothing` if no such path is possible.
+Lots of problems can be modeled as graphs, but oftentimes one doesn't want to use an explicit graph structure to represent the problem. Maybe the graph would be too big (or is infinite), maybe making an explicit graph is unwieldy for the problem at hand, or maybe one just wants to generalize over graph implementations. That's where this library comes in: this is a collection of generalized search algorithms, so that one doesn't have to make the graphs explicit. In general, this means that one provides each search function with a function to generate neighboring states, possibly some functions to generate additional information for the search, a predicate which tells when the search is complete, and an initial state to start from. The result is a path from the initial state to a "solved" state, or `Nothing` if no such path is possible.
 
 ## Documentation
 Documentation is hosted on [Hackage](http://hackage.haskell.org/package/search-algorithms).
+
+## Acknowledgements
+This library shares a similar functionality with the [astar](http://hackage.haskell.org/package/astar) library (which I was unaware of when I released the first version of this library). `astar`'s interface has since influenced the development of this library's interface, and this library owes a debt of gratitude to `astar` for that reason.
+
 
 ## Examples
 ### Change-making problem
 ```haskell
 import Algorithm.Search (bfs)
 
-countChange target = bfs add_one_coin [(> target)] (== target) 0
+countChange target = bfs (add_one_coin `pruning` (> target)) (== target) 0
   where
     add_one_coin amt = map (+ amt) coins
     coins = [1, 5, 10, 25]
@@ -36,7 +40,7 @@ graph = Map.fromList [
   ]
 
 -- Run dfs on the graph:
--- >>> dfs (graph Map.!) [] (== 4) 1
+-- >>> dfs (graph Map.!) (== 4) 1
 -- Just [3,4]
 ```
 
@@ -55,14 +59,14 @@ taxicabDistance (x1, y1) (x2, y2) = abs (x2 - x1) + abs (y2 - y1)
 
 findPath :: (Int, Int) -> (Int, Int) -> Maybe (Int, [(Int, (Int, Int))])
 findPath start end =
-  let next =
-        map (\pt -> (1, taxicabDistance pt end, pt))
-        . taxicabNeighbors
-  in aStar next [isWall] (== end) start
+  let next = taxicabNeighbors
+      cost = taxicabDistance
+      remaining = (taxicabDistance end)
+  in aStar (next `pruning` isWall) cost remaining (== end) start
 
 -- findPath p1 p2 finds a path between p1 and p2, avoiding the wall
 -- >>> findPath (0, 0) (2, 0)
--- Just (6,[(1,(0,1)),(1,(0,2)),(1,(1,2)),(1,(2,2)),(1,(2,1)),(1,(2,0))])
+-- Just (6,[(0,1),(0,2),(1,2),(2,2),(2,1),(2,0)])
 --
 -- This correctly goes up and around the wall
 ```

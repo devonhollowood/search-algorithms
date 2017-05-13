@@ -6,6 +6,7 @@ module Algorithm.SearchSpec (
 import Test.Hspec
 import Algorithm.Search
 import qualified Data.Map as Map
+import Data.Maybe (fromJust)
 
 main :: IO ()
 main = hspec spec
@@ -35,11 +36,11 @@ acyclicUnweightedGraph = Map.fromList [
   ]
 
 -- | Example cyclic directed weighted graph
-cyclicWeightedGraph :: Map.Map Char [(Int, Char)]
+cyclicWeightedGraph :: Map.Map Char [(Char, Int)]
 cyclicWeightedGraph = Map.fromList [
-  ('a', [(1, 'b'), (2, 'c')]),
-  ('b', [(1, 'a'), (2, 'c'), (5, 'd')]),
-  ('c', [(1, 'a'), (2, 'd')]),
+  ('a', [('b', 1), ('c', 2)]),
+  ('b', [('a', 1), ('c', 2), ('d', 5)]),
+  ('c', [('a', 1), ('d', 2)]),
   ('d', [])
   ]
 
@@ -56,59 +57,67 @@ taxicabDistance (x1, y1) (x2, y2) = abs (x2 - x1) + abs (y2 - y1)
 spec :: Spec
 spec = do
   describe "bfs" $ do
+    let next = (cyclicUnweightedGraph Map.!)
     it "performs breadth-first search" $
-      bfs (cyclicUnweightedGraph Map.!) [] (== 4) 0
-        `shouldBe` Just [1, 4]
+      bfs next (== 4) 0 `shouldBe` Just [1, 4]
     it "handles pruning" $
-      bfs (cyclicUnweightedGraph Map.!) [odd] (== 4) 0
-        `shouldBe` Just [2, 6, 4]
+      bfs (next `pruning` odd) (== 4) 0 `shouldBe` Just [2, 6, 4]
     it "returns Nothing when no path is possible" $
-      bfs (cyclicUnweightedGraph Map.!) [odd, (== 6)] (== 4) 0
-        `shouldBe` Nothing
+      bfs (next `pruning` odd `pruning` (== 6)) (== 4) 0 `shouldBe` Nothing
   describe "dfs" $ do
+    let next = (cyclicUnweightedGraph Map.!)
     it "performs depth-first search" $
-      dfs (cyclicUnweightedGraph Map.!) [] (== 4) 0
-        `shouldBe` Just [3, 2, 8, 5, 4]
+      dfs next (== 4) 0 `shouldBe` Just [3, 2, 8, 5, 4]
     it "handles pruning" $
-      dfs (cyclicUnweightedGraph Map.!) [odd] (== 4) 0
-        `shouldBe` Just [2, 6, 4]
+      dfs (next `pruning` odd) (== 4) 0 `shouldBe` Just [2, 6, 4]
     it "returns Nothing when no path is possible" $
-      dfs (cyclicUnweightedGraph Map.!) [odd, (== 6)] (== 4) 0
-        `shouldBe` Nothing
+      dfs (next `pruning` odd `pruning` (== 6)) (== 4) 0 `shouldBe` Nothing
     it "handles doubly-inserted nodes" $
-      dfs (acyclicUnweightedGraph Map.!) [] (==4) 0
-        `shouldBe` Just [1, 4]
+      dfs (acyclicUnweightedGraph Map.!) (==4) 0 `shouldBe` Just [1, 4]
   describe "dijkstra" $ do
+    let next = map fst . (cyclicWeightedGraph Map.!)
+        cost a b = fromJust . lookup b $ cyclicWeightedGraph Map.! a
     it "performs dijkstra's algorithm" $
-      dijkstra (cyclicWeightedGraph Map.!) [] (== 'd') 'a'
-        `shouldBe` Just (4, [(2, 'c'), (2, 'd')])
+      dijkstra next cost (== 'd') 'a'
+        `shouldBe` Just (4, ['c', 'd'])
     it "handles pruning" $
-      dijkstra (cyclicWeightedGraph Map.!) [(== 'c')] (== 'd') 'a'
-        `shouldBe` Just (6, [(1, 'b'), (5, 'd')])
+      dijkstra (next `pruning` (== 'c')) cost (== 'd') 'a'
+        `shouldBe` Just (6, ['b', 'd'])
     it "returns Nothing when no path is possible" $
-      dijkstra (cyclicWeightedGraph Map.!) [(== 'b'), (== 'c')] (== 'd') 'a'
+      dijkstra (next `pruning` (== 'b') `pruning` (== 'c')) cost (== 'd') 'a'
         `shouldBe` Nothing
     it "handles zero-length solutions" $
-      dijkstra (cyclicWeightedGraph Map.!) [] (== 'd') 'd'
-        `shouldBe` Just (0, [])
+      dijkstra next cost (== 'd') 'd' `shouldBe` Just (0, [])
   describe "aStar" $ do
     let start = (0, 0)
         end = (2, 0)
-        next =
-          map (\pt -> (1, taxicabDistance pt end, pt))
-          . taxicabNeighbors
     it "performs the A* algorithm" $
-      aStar next [] (== end) start
-        `shouldBe` Just (2, [(1, (1, 0)), (1, (2, 0))])
+      aStar taxicabNeighbors taxicabDistance (taxicabDistance end) (== end)
+        start
+        `shouldBe` Just (2, [(1, 0), (2, 0)])
     it "handles pruning" $
-      aStar next [isWall] (== end) start
-        `shouldBe` Just (6, [(1, (0, 1)),
-                             (1, (0, 2)),
-                             (1, (1, 2)),
-                             (1, (2, 2)),
-                             (1, (2, 1)),
-                             (1, (2, 0))
-                            ])
+      aStar (taxicabNeighbors `pruning` isWall) taxicabDistance
+        (taxicabDistance end) (== end) start
+        `shouldBe` Just (6, [(0, 1), (0, 2), (1, 2), (2, 2), (2, 1), (2, 0)])
     it "returns Nothing when no path is possible" $
-      aStar next [isWall, \ p -> taxicabDistance p (0,0) > 1] (== end) start
+      aStar
+        (taxicabNeighbors
+          `pruning` isWall
+          `pruning` (\ p -> taxicabDistance p (0,0) > 1)
+        )
+        taxicabDistance
+        (taxicabDistance end)
+        (== end)
+        start
         `shouldBe` Nothing
+    it "handles zero-length solutions" $
+      aStar taxicabNeighbors taxicabDistance (taxicabDistance end) (== start)
+        start
+        `shouldBe` Just (0, [])
+  describe "incrementalCosts" $ do
+    let cost a b = fromJust . lookup b $ cyclicWeightedGraph Map.! a
+    it "gives the incremental costs along a path" $
+      incrementalCosts cost ['a', 'b', 'd'] `shouldBe` [1, 5]
+    it "handles zero-length paths" $ do
+      incrementalCosts cost [] `shouldBe` []
+      incrementalCosts cost ['a'] `shouldBe` []

@@ -1,35 +1,38 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- | This module contains a collection of generalized graph search algorithms,
 -- for when you don't want to explicitly represent your data as a graph. The
 -- general idea is to provide these algorithms with a way of generating "next"
--- states (and associated information), a way of determining when you have found
--- a solution, a way of pruning out "dead ends", and an initial state.
+-- states, a way of generating associated information), a way of determining
+-- when you have found a solution, and an initial state.
 module Algorithm.Search (
+  -- * Searches
   bfs,
   dfs,
   dijkstra,
-  aStar
+  aStar,
+  -- * Utility
+  incrementalCosts,
+  pruning
   ) where
 
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.List as List
+import qualified Data.Foldable as Foldable
 
-
--- | @bfs next prunes found initial@ performs a breadth-first search over a set
--- of states, starting with @initial@, generating neighboring states with
--- @next@, and pruning out any state for which a function in @prunes@ returns
--- 'True'. It returns a path to a state for which @found@ returns 'True'.
+-- | @bfs next found initial@ performs a breadth-first search over a set of
+-- states, starting with @initial@, and generating neighboring states with
+-- @next@. It returns a path to a state for which @found@ returns 'True'.
 -- Returns 'Nothing' if no path is possible.
 --
 -- === Example: Making change problem
 --
 -- >>> :{
--- countChange target = bfs add_one_coin [(> target)] (== target) 0
+-- countChange target = bfs (add_one_coin `pruning` (> target)) (== target) 0
 --   where
 --     add_one_coin amt = map (+ amt) coins
 --     coins = [25, 10, 5, 1]
@@ -37,12 +40,9 @@ import qualified Data.List as List
 --
 -- >>> countChange 67
 -- Just [25,50,60,65,66,67]
-bfs :: Ord state =>
-  (state -> [state])
+bfs :: (Foldable f, Ord state)
+  => (state -> f state)
   -- ^ Function to generate "next" states given a current state
-  -> [state -> Bool]
-  -- ^ List of ways to prune search. These are predicates which, if 'True', are
-  -- considered to indicate a "dead end".
   -> (state -> Bool)
   -- ^ Predicate to determine if solution found. 'bfs' returns a path to the
   -- first state for which this predicate returns 'True'.
@@ -57,11 +57,10 @@ bfs =
   generalizedSearch Seq.empty id (\_ _ -> False)
 
 
--- | @dfs next prunes found initial@ performs a depth-first search over a set
--- of states, starting with @initial@, generating neighboring states with
--- @next@, and pruning out any state for which a function in @prunes@ returns
--- 'True'. It returns a depth-first path to a state for which @found@
--- returns 'True'. Returns 'Nothing' if no path is possible.
+-- | @dfs next found initial@ performs a depth-first search over a set
+-- of states, starting with @initial@ and generating neighboring states with
+-- @next@. It returns a depth-first path to a state for which @found@ returns
+-- 'True'. Returns 'Nothing' if no path is possible.
 --
 -- === Example: Simple directed graph search
 --
@@ -69,14 +68,11 @@ bfs =
 --
 -- >>> graph = Map.fromList [(1, [2, 3]), (2, [4]), (3, [4]), (4, [])]
 --
--- >>> dfs (graph Map.!) [] (== 4) 1
+-- >>> dfs (graph Map.!) (== 4) 1
 -- Just [3,4]
-dfs :: Ord state =>
-  (state -> [state])
+dfs :: (Foldable f, Ord state)
+  => (state -> f state)
   -- ^ Function to generate "next" states given a current state
-  -> [state -> Bool]
-  -- ^ List of ways to prune search. These are predicates which, if 'True', are
-  -- considered to indicate a "dead end".
   -> (state -> Bool)
   -- ^ Predicate to determine if solution found. 'dfs' returns a path to the
   -- first state for which this predicate returns 'True'.
@@ -91,44 +87,47 @@ dfs =
   generalizedSearch [] id (\_ _ -> True)
 
 
--- | @dijkstra next prunes found initial@ performs a shortest-path search over
+-- | @dijkstra next cost found initial@ performs a shortest-path search over
 -- a set of states using Dijkstra's algorithm, starting with @initial@,
--- generating neighboring states and their incremental costs with @next@, and
--- pruning out any state for which a function in @prunes@ returns 'True'.
--- This will find the least-costly path from an initial state to a state for
--- which @found@ returns 'True'. Returns 'Nothing' if no path to a solved state
--- is possible.
+-- generating neighboring states with @next@, and their incremental costs with
+-- @costs@. This will find the least-costly path from an initial state to a
+-- state for which @found@ returns 'True'. Returns 'Nothing' if no path to a
+-- solved state is possible.
 --
 -- === Example: Making change problem, with a twist
 --
 -- >>> :{
 -- -- Twist: dimes have a face value of 10 cents, but are actually rare
 -- -- misprints which are worth 10 dollars
--- countChange target = dijkstra add_one_coin [(> target)] (== target) 0
+-- countChange target =
+--   dijkstra (add_coin `pruning` (> target)) true_cost  (== target) 0
 --   where
---     add_one_coin amt =
---       map (\(true_val, face_val) -> (true_val, face_val + amt)) coin_values
---     coin_values = [(25, 25), (1000, 10), (5, 5), (1, 1)]
+--     coin_values = [(25, 25), (10, 1000), (5, 5), (1, 1)]
+--     add_coin amt = map ((+ amt) . snd) coin_values
+--     true_cost low high =
+--       case lookup (high - low) coin_values of
+--         Just val -> val
+--         Nothing -> error $ "invalid costs: " ++ show high ++ ", " ++ show low
 -- :}
 --
 -- >>> countChange 67
--- Just (67,[(1,1),(1,2),(5,7),(5,12),(5,17),(25,42),(25,67)])
-dijkstra :: (Num cost, Ord cost, Ord state) =>
-  (state -> [(cost, state)])
-  -- ^ Function to generate list of incremental cost and neighboring states
-  -- given the current state
-  -> [state -> Bool]
-  -- ^ List of ways to prune search. These are predicates which, if 'True', are
-  -- considered to indicate a "dead end".
+-- Just (67,[1,2,7,12,17,42,67])
+dijkstra :: (Foldable f, Num cost, Ord cost, Ord state)
+  => (state -> f state)
+  -- ^ Function to generate list of neighboring states given the current state
+  -> (state -> state -> cost)
+  -- ^ Function to generate list of costs between neighboring states. This is
+  -- only called for adjacent states, so it is safe to have this function be
+  -- partial for non-neighboring states.
   -> (state -> Bool)
   -- ^ Predicate to determine if solution found. 'dijkstra' returns the shortest
   -- path to the first state for which this predicate returns 'True'.
   -> state
   -- ^ Initial state
-  -> Maybe (cost, [(cost, state)])
-  -- (Total cost, [(incremental cost, step)]) for the first path found which
+  -> Maybe (cost, [state])
+  -- (Total cost, list of steps) for the first path found which
   -- satisfies the given predicate
-dijkstra next prunes found initial =
+dijkstra next cost found initial =
   -- Dijkstra's algorithm can be viewed as a generalized search, with the search
   -- container being a heap, with the states being compared without regard to
   -- cost, with the shorter paths taking precedence over longer ones, and with
@@ -136,76 +135,158 @@ dijkstra next prunes found initial =
   -- This implementation makes that transformation, then transforms that result
   -- back into the desired result from @dijkstra@
   unpack <$>
-    generalizedSearch emptyLIFOHeap snd better next' (map (. snd) prunes)
-      (found . snd) (0, initial)
+    generalizedSearch emptyLIFOHeap snd leastCostly next' (found . snd)
+      (0, initial)
   where
-    next' (cost, st) = map (\(incr, new_st) -> (incr + cost, new_st)) (next st)
-    unpack packed_states =
-      let costs = map fst packed_states
-          incremental_costs = zipWith (-) costs (0:costs)
-          states = map snd packed_states
-      in (if null packed_states then 0 else fst . last $ packed_states,
-          zip incremental_costs states)
-    better ((cost_a, _):_) ((cost_b, _):_) = cost_b < cost_a
-    better [] _ = False -- logically this never happens, because if you have a
-                        -- zero-length path a point, you already visited it
-                        -- and thus do not consider other paths to it
-    better _ [] = True  -- logically this never happens, because you cannot find
-                        -- a new zero-length path to a point
+    next' (old_cost, st) =
+      (\new_st -> (cost st new_st + old_cost, new_st))
+        <$> Foldable.toList (next st)
+    unpack [] = (0, [])
+    unpack packed_states = (fst . last $ packed_states, map snd packed_states)
 
 
--- | @aStar next prunes found initial@ performs a best-first search using
+-- | @aStar next cost remaining found initial@ performs a best-first search using
 -- the A* search algorithm, starting with the state @initial@, generating
--- neighboring states, their cost, and an estimate of the remaining cost with
--- @next@, and pruning out any state for which a function in @prunes@ returns
--- 'True'. This returns a path to a state for which @found@ returns 'True'.
--- If the estimate is strictly a lower bound on the remaining cost to reach a
--- solved state, then the returned path is the shortest path. Returns
--- 'Nothing' if no path to a solved state is possible.
+-- neighboring states with @next@, their cost with @cost@, and an estimate of
+-- the remaining cost with @remaining@. This returns a path to a state for which
+-- @found@ returns 'True'. If @remaining@ is strictly a lower bound on the
+-- remaining cost to reach a solved state, then the returned path is the
+-- shortest path. Returns 'Nothing' if no path to a solved state is possible.
 --
 -- === Example: Path finding in taxicab geometry
 --
 -- >>> :{
 -- neighbors (x, y) = [(x, y + 1), (x - 1, y), (x + 1, y), (x, y - 1)]
 -- dist (x1, y1) (x2, y2) = abs (y2 - y1) + abs (x2 - x1)
--- nextTowards dest pos = map (\p -> (1, dist p dest, p)) (neighbors pos)
+-- start = (0, 0)
+-- end = (0, 2)
+-- isWall = (== (0, 1))
 -- :}
 --
--- >>> aStar (nextTowards (0, 2)) [(== (0, 1))] (== (0, 2)) (0, 0)
--- Just (4,[(1,(1,0)),(1,(1,1)),(1,(1,2)),(1,(0,2))])
-aStar :: (Num cost, Ord cost, Ord state) =>
-  (state -> [(cost, cost, state)])
+-- >>> aStar (neighbors `pruning` isWall) dist (dist end) (== end) start
+-- Just (4,[(1,0),(1,1),(1,2),(0,2)])
+aStar :: (Foldable f, Num cost, Ord cost, Ord state)
+  => (state -> f state)
   -- ^ Function which, when given the current state, produces a list whose
   -- elements are (incremental cost to reach neighboring state,
   -- estimate on remaining cost from said state, said state).
-  -> [state -> Bool]
-  -- ^ List of ways to prune search. These are predicates which, if 'True', are
-  -- considered to indicate a "dead end".
+  -> (state -> state -> cost)
+  -- ^ Function to generate list of costs between neighboring states. This is
+  -- only called for adjacent states, so it is safe to have this function be
+  -- partial for non-neighboring states.
+  -> (state -> cost)
+  -- ^ Estimate on remaining cost given a state
   -> (state -> Bool)
   -- ^ Predicate to determine if solution found. 'aStar' returns the shortest
   -- path to the first state for which this predicate returns 'True'.
   -> state
   -- ^ Initial state
-  -> Maybe (cost, [(cost, state)])
-  -- (Total cost, [(incremental cost, step)]) for the first path found which
-  -- satisfies the given predicate
-aStar next prunes found initial =
-  -- The idea of this implementation is that we can use the same machinery as
-  -- Dijkstra's algorithm, by changing Dijsktra's cost function to be
-  -- (incremental cost + lower bound remaining cost). We'd still like to be able
-  -- to return the list of incremental costs, so we modify the internal state to
-  -- be (incremental cost to state, state). Then at the end we undo this
-  -- transformation
-  unpack <$> dijkstra next' (map (. snd) prunes) (found . snd) (0, initial)
+  -> Maybe (cost, [state])
+  -- (Total cost, list of steps) for the first path found which satisfies the
+  -- given predicate
+aStar next cost remaining found initial =
+  -- A* can be viewed as a generalized search, with the search container being a
+  -- heap, with the states being compared without regard to cost, with the
+  -- shorter paths taking precedence over longer ones, and with
+  -- the stored state being (total cost estimate, (cost so far, state)).
+  -- This implementation makes that transformation, then transforms that result
+  -- back into the desired result from @aStar@
+  unpack <$> generalizedSearch emptyLIFOHeap snd2 leastCostly next'
+    (found . snd2) (remaining initial, (0, initial))
   where
-    next' (_, st) = map pack (next st)
-    pack (incr, est, new_st) = (incr + est, (incr, new_st))
-    unpack (_, packed_states) =
-      let unpacked_states = map snd packed_states
-      in (sum (map fst unpacked_states), unpacked_states)
+    next' (_, (old_cost, old_st)) =
+      update_state <$> Foldable.toList (next old_st)
+      where
+        update_state new_st =
+          let new_cost = old_cost + cost old_st new_st
+              new_est = new_cost + remaining new_st
+          in (new_est, (new_cost, new_st))
+    unpack [] = (0, [])
+    unpack packed_states =
+      (fst . snd . last $ packed_states, map snd2 packed_states)
+    snd2 = snd . snd
 
 
--- | A 'SearchState' represents the state of a generalized search at a given
+-- | @incrementalCosts cost_fn states@ gives a list of the incremental costs
+-- going from state to state along the path given in @states@, using the cost
+-- function given by @cost_fn@. Note that the paths returned by the searches
+-- in this module do not include the initial state, so if you want the
+-- incremental costs along a @path@ returned by one of these searches, you
+-- want to use @incrementalCosts cost_fn (initial : path)@.
+--
+-- === Example: Getting incremental costs from dijkstra
+--
+-- >>> import Data.Maybe (fromJust)
+--
+-- >>> :{
+-- cyclicWeightedGraph :: Map.Map Char [(Char, Int)]
+-- cyclicWeightedGraph = Map.fromList [
+--   ('a', [('b', 1), ('c', 2)]),
+--   ('b', [('a', 1), ('c', 2), ('d', 5)]),
+--   ('c', [('a', 1), ('d', 2)]),
+--   ('d', [])
+--   ]
+-- start = (0, 0)
+-- end = (0, 2)
+-- cost a b = fromJust . lookup b $ cyclicWeightedGraph Map.! a
+-- :}
+--
+-- >>> incrementalCosts cost ['a', 'b', 'd']
+-- [1,5]
+incrementalCosts ::
+  (state -> state -> cost)
+  -- ^ Function to generate list of costs between neighboring states. This is
+  -- only called for adjacent states in the `states` list, so it is safe to have
+  -- this function be partial for non-neighboring states.
+  -> [state]
+  -- ^ A path, given as a list of adjacent states, along which to find the
+  -- incremental costs
+  -> [cost]
+  -- ^ List of incremental costs along given path
+incrementalCosts cost_fn states = zipWith cost_fn states (tail states)
+
+
+-- | @next \`pruning\` predicate@ streams the elements generate by @next@ into a
+-- list, removing elements which satisfy @predicate@. This is useful for the
+-- common case when you want to logically separate your search's `next` function
+-- from some way of determining when you've reached a dead end.
+--
+-- === Example: Pruning a Set
+--
+-- >>> import qualified Data.Set as Set
+--
+-- >>> ((\x -> Set.fromList [0..x]) `pruning` even) 10
+-- [1,3,5,7,9]
+--
+-- === Example: depth-first search, avoiding certain nodes
+--
+-- >>> import qualified Data.Map as Map
+--
+-- >>> :{
+-- graph = Map.fromList [
+--   ('a', ['b', 'c', 'd']),
+--   ('b', [undefined]),
+--   ('c', ['e']),
+--   ('d', [undefined]),
+--   ('e', [])
+--   ]
+-- :}
+--
+-- >>> dfs ((graph Map.!) `pruning` (`elem` "bd")) (== 'e') 'a'
+-- Just "ce"
+pruning ::
+  (Foldable f)
+  => (a -> f a)
+  -- ^ Function to generate next states
+  -> (a -> Bool)
+  -- ^ Predicate to prune on
+  -> (a -> [a])
+  -- ^ Version of @next@ which excludes elements satisfying @predicate@
+next `pruning` predicate =
+  (filter (not . predicate) . Foldable.toList) <$> next
+
+
+-- | A @SearchState@ represents the state of a generalized search at a given
 -- point in an algorithms execution. The advantage of this abstraction is that
 -- it can be used for things like bidirectional searches, where you want to
 -- stop and start a search part-way through.
@@ -217,19 +298,19 @@ data SearchState container stateKey state = SearchState {
   }
 
 
--- | 'nextSearchState' moves from one 'searchState' to the next in the
+-- | @nextSearchState@ moves from one @searchState@ to the next in the
 -- generalized search algorithm
-nextSearchState :: (SearchContainer f state, Ord stateKey) =>
-  ([state] -> [state] -> Bool)
+nextSearchState ::
+  (Foldable f, SearchContainer container, Ord stateKey, Elem container ~ state)
+  => ([state] -> [state] -> Bool)
   -> (state -> stateKey)
-  -> (state -> [state])
-  -> [state -> Bool]
-  -> SearchState f stateKey state
-  -> Maybe (SearchState f stateKey state)
-nextSearchState better mk_key next prunes old = do
+  -> (state -> f state)
+  -> SearchState container stateKey state
+  -> Maybe (SearchState container stateKey state)
+nextSearchState better mk_key next old = do
   new_state <- mk_search_state <$> pop new_queue
   if mk_key (current new_state) `Set.member` visited old
-    then nextSearchState better mk_key next prunes new_state
+    then nextSearchState better mk_key next new_state
     else Just new_state
   where
     mk_search_state (new_current, remaining_queue) = SearchState {
@@ -242,7 +323,7 @@ nextSearchState better mk_key next prunes old = do
     (new_queue, new_paths) =
       List.foldl' update_queue_paths (queue old, paths old) new_states
     update_queue_paths (old_queue, old_paths) st =
-      if mk_key st `Set.member` visited old || any ($ st) prunes
+      if mk_key st `Set.member` visited old
       then (old_queue, old_paths)
       else
         case Map.lookup (mk_key st) old_paths of
@@ -262,9 +343,10 @@ nextSearchState better mk_key next prunes old = do
 -- at their core the same, with these details substituted. By writing these
 -- searches in terms of this function, we reduce the chances of errors sneaking
 -- into each separate implementation.
-generalizedSearch :: (SearchContainer container state, Ord stateKey) =>
-  container
-  -- ^ Empty 'SearchContainer'
+generalizedSearch ::
+  (Foldable f, SearchContainer container, Ord stateKey, Elem container ~ state)
+  => container
+  -- ^ Empty @SearchContainer@
   -> (state -> stateKey)
   -- ^ Function to turn a @state@ into a key by which states will be compared
   -- when determining whether a state has be enqueued and / or visited
@@ -272,23 +354,20 @@ generalizedSearch :: (SearchContainer container state, Ord stateKey) =>
   -- ^ Function @better old new@, which when given a choice between an @old@ and
   -- a @new@ path to a state, returns True when @new@ is a "better" path than
   -- old and should thus be inserted
-  -> (state -> [state])
+  -> (state -> f state)
   -- ^ Function to generate "next" states given a current state
-  -> [state -> Bool]
-  -- ^ List of ways to prune search. These are predicates which, if 'True', are
-  -- considered to indicate a "dead end".
   -> (state -> Bool)
-  -- ^ Predicate to determine if solution found. 'search' returns a path to the
-  -- first state for which this predicate returns 'True'.
+  -- ^ Predicate to determine if solution found. @generalizedSearch@ returns a
+  -- path to the first state for which this predicate returns 'True'.
   -> state
   -- ^ Initial state
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-generalizedSearch empty mk_key better next prunes found initial =
+generalizedSearch empty mk_key better next found initial =
   let get_steps search_st = paths search_st Map.! mk_key (current search_st)
   in fmap (reverse . get_steps)
-     . findIterate (nextSearchState better mk_key next prunes) (found . current)
+     . findIterate (nextSearchState better mk_key next) (found . current)
      $ SearchState initial empty (Set.singleton $ mk_key initial)
        (Map.singleton (mk_key initial) [])
 
@@ -297,27 +376,31 @@ newtype LIFOHeap k a = LIFOHeap (Map.Map k [a])
 emptyLIFOHeap :: LIFOHeap k a
 emptyLIFOHeap = LIFOHeap Map.empty
 
--- | The 'SearchContainer' class abstracts the idea of a container to be used in
--- 'generalizedSearch'
-class SearchContainer container elem | container -> elem where
-  pop :: container -> Maybe (elem, container)
-  push :: container -> elem -> container
+-- | The @SearchContainer@ class abstracts the idea of a container to be used in
+-- @generalizedSearch@
+class SearchContainer container where
+  type Elem container
+  pop :: container -> Maybe (Elem container, container)
+  push :: container -> Elem container -> container
 
-instance SearchContainer (Seq.Seq a) a where
+instance SearchContainer (Seq.Seq a) where
+  type Elem (Seq.Seq a) = a
   pop s =
     case Seq.viewl s of
       Seq.EmptyL -> Nothing
       (x Seq.:< xs) -> Just (x, xs)
   push s a = s Seq.|> a
 
-instance SearchContainer [a] a where
+instance SearchContainer [a] where
+  type Elem [a] = a
   pop list =
     case list of
       [] -> Nothing
       (x : xs) -> Just (x, xs)
   push list a = a : list
 
-instance Ord k => SearchContainer (LIFOHeap k a) (k, a) where
+instance Ord k => SearchContainer (LIFOHeap k a) where
+  type Elem (LIFOHeap k a) = (k, a)
   pop (LIFOHeap inner)
     | Map.null inner = Nothing
     | otherwise = case Map.findMin inner of
@@ -334,3 +417,18 @@ findIterate :: (a -> Maybe a) -> (a -> Bool) -> a -> Maybe a
 findIterate next found initial
   | found initial = Just initial
   | otherwise = next initial >>= findIterate next found
+
+
+-- | @leastCostly paths_a paths_b@ is a utility function to be used with
+-- 'dijkstra'-like functions. It returns True when the cost of @paths_a@
+-- is less than the cost of @paths_b@, where the total costs are the first
+-- elements in each tuple in each path
+leastCostly :: Ord a => [(a, b)] -> [(a, b)] -> Bool
+leastCostly ((cost_a, _):_) ((cost_b, _):_) = cost_b < cost_a
+-- logically this never happens, because if you have a
+-- zero-length path a point, you already visited it
+-- and thus do not consider other paths to it
+leastCostly [] _ = False
+-- logically this never happens, because you cannot find
+-- a new zero-length path to a point
+leastCostly _ [] = True
