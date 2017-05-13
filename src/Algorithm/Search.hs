@@ -5,13 +5,15 @@
 -- | This module contains a collection of generalized graph search algorithms,
 -- for when you don't want to explicitly represent your data as a graph. The
 -- general idea is to provide these algorithms with a way of generating "next"
--- states (and associated information), a way of determining when you have found
--- a solution, a way of pruning out "dead ends", and an initial state.
+-- states, a way of generating associated information), a way of determining
+-- when you have found a solution, and an initial state.
 module Algorithm.Search (
+  -- * Searches
   bfs,
   dfs,
   dijkstra,
   aStar,
+  -- * Utility
   incrementalCosts,
   pruning
   ) where
@@ -123,7 +125,7 @@ dijkstra :: (Foldable f, Num cost, Ord cost, Ord state)
   -> state
   -- ^ Initial state
   -> Maybe (cost, [state])
-  -- (Total cost, [(incremental cost, step)]) for the first path found which
+  -- (Total cost, list of steps) for the first path found which
   -- satisfies the given predicate
 dijkstra next cost found initial =
   -- Dijkstra's algorithm can be viewed as a generalized search, with the search
@@ -180,15 +182,15 @@ aStar :: (Foldable f, Num cost, Ord cost, Ord state)
   -> state
   -- ^ Initial state
   -> Maybe (cost, [state])
-  -- (Total cost, [(incremental cost, step)]) for the first path found which
-  -- satisfies the given predicate
+  -- (Total cost, list of steps) for the first path found which satisfies the
+  -- given predicate
 aStar next cost remaining found initial =
-  -- The idea of this implementation is that we can use the same machinery as
-  -- Dijkstra's algorithm, by changing Dijsktra's cost function to be
-  -- (incremental cost + lower bound remaining cost). We'd still like to be able
-  -- to return the list of incremental costs, so we modify the internal state to
-  -- be (incremental cost to state, state). Then at the end we undo this
-  -- transformation
+  -- A* can be viewed as a generalized search, with the search container being a
+  -- heap, with the states being compared without regard to cost, with the
+  -- shorter paths taking precedence over longer ones, and with
+  -- the stored state being (total cost estimate, (cost so far, state)).
+  -- This implementation makes that transformation, then transforms that result
+  -- back into the desired result from @aStar@
   unpack <$> generalizedSearch emptyLIFOHeap snd2 leastCostly next'
     (found . snd2) (remaining initial, (0, initial))
   where
@@ -257,7 +259,7 @@ incrementalCosts cost_fn states = zipWith cost_fn states (tail states)
 -- [1,3,5,7,9]
 --
 -- === Example: depth-first search, avoiding certain nodes
--- 
+--
 -- >>> import qualified Data.Map as Map
 --
 -- >>> :{
@@ -284,7 +286,7 @@ next `pruning` predicate =
   (filter (not . predicate) . Foldable.toList) <$> next
 
 
--- | A 'SearchState' represents the state of a generalized search at a given
+-- | A @SearchState@ represents the state of a generalized search at a given
 -- point in an algorithms execution. The advantage of this abstraction is that
 -- it can be used for things like bidirectional searches, where you want to
 -- stop and start a search part-way through.
@@ -296,7 +298,7 @@ data SearchState container stateKey state = SearchState {
   }
 
 
--- | 'nextSearchState' moves from one 'searchState' to the next in the
+-- | @nextSearchState@ moves from one @searchState@ to the next in the
 -- generalized search algorithm
 nextSearchState ::
   (Foldable f, SearchContainer container, Ord stateKey, Elem container ~ state)
@@ -344,7 +346,7 @@ nextSearchState better mk_key next old = do
 generalizedSearch ::
   (Foldable f, SearchContainer container, Ord stateKey, Elem container ~ state)
   => container
-  -- ^ Empty 'SearchContainer'
+  -- ^ Empty @SearchContainer@
   -> (state -> stateKey)
   -- ^ Function to turn a @state@ into a key by which states will be compared
   -- when determining whether a state has be enqueued and / or visited
@@ -355,8 +357,8 @@ generalizedSearch ::
   -> (state -> f state)
   -- ^ Function to generate "next" states given a current state
   -> (state -> Bool)
-  -- ^ Predicate to determine if solution found. 'search' returns a path to the
-  -- first state for which this predicate returns 'True'.
+  -- ^ Predicate to determine if solution found. @generalizedSearch@ returns a
+  -- path to the first state for which this predicate returns 'True'.
   -> state
   -- ^ Initial state
   -> Maybe [state]
@@ -374,8 +376,8 @@ newtype LIFOHeap k a = LIFOHeap (Map.Map k [a])
 emptyLIFOHeap :: LIFOHeap k a
 emptyLIFOHeap = LIFOHeap Map.empty
 
--- | The 'SearchContainer' class abstracts the idea of a container to be used in
--- 'generalizedSearch'
+-- | The @SearchContainer@ class abstracts the idea of a container to be used in
+-- @generalizedSearch@
 class SearchContainer container where
   type Elem container
   pop :: container -> Maybe (Elem container, container)
