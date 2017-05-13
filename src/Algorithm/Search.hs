@@ -5,7 +5,7 @@
 -- | This module contains a collection of generalized graph search algorithms,
 -- for when you don't want to explicitly represent your data as a graph. The
 -- general idea is to provide these algorithms with a way of generating "next"
--- states, a way of generating associated information), a way of determining
+-- states, a way of generating associated information, a way of determining
 -- when you have found a solution, and an initial state.
 module Algorithm.Search (
   -- * Searches
