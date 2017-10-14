@@ -186,12 +186,14 @@ spec = do
           costM a b = lookup b $ cyclicWeightedGraph Map.! a
       dijkstraM nextM costM (return . (== 'd')) 'a'
         `shouldBe` Just (Just (4, ['c', 'd']))
-      dijkstraM (nextM `pruningM` (return . (== 'c'))) costM (return . (== 'd')) 'a'
+      dijkstraM (nextM `pruningM` (return . (== 'c'))) costM
+        (return . (== 'd')) 'a'
         `shouldBe` Just (Just (6, ['b', 'd']))
     it "handles zero-length solutions" $ do
       let nextM = return . map fst . (cyclicWeightedGraph Map.!)
           costM a b = lookup b $ cyclicWeightedGraph Map.! a
-      dijkstraM nextM costM (return . (== 'd')) 'd' `shouldBe` Just (Just (0, []))
+      dijkstraM nextM costM (return . (== 'd')) 'd'
+        `shouldBe` Just (Just (0, []))
     it "correctly handles monadic behavior" $ do
       dijkstraM
         (taxicabNeighborsBounded `pruningM` (return . isBigWall))

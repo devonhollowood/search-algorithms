@@ -135,7 +135,7 @@ dijkstra :: (Foldable f, Num cost, Ord cost, Ord state)
   -> state
   -- ^ Initial state
   -> Maybe (cost, [state])
-  -- (Total cost, list of steps) for the first path found which
+  -- ^ (Total cost, list of steps) for the first path found which
   -- satisfies the given predicate
 dijkstra next cost found initial =
   -- Dijkstra's algorithm can be viewed as a generalized search, with the search
@@ -155,8 +155,8 @@ dijkstra next cost found initial =
     unpack packed_states = (fst . last $ packed_states, map snd packed_states)
 
 
--- | @aStar next cost remaining found initial@ performs a best-first search using
--- the A* search algorithm, starting with the state @initial@, generating
+-- | @aStar next cost remaining found initial@ performs a best-first search
+-- using the A* search algorithm, starting with the state @initial@, generating
 -- neighboring states with @next@, their cost with @cost@, and an estimate of
 -- the remaining cost with @remaining@. This returns a path to a state for which
 -- @found@ returns 'True'. If @remaining@ is strictly a lower bound on the
@@ -192,7 +192,7 @@ aStar :: (Foldable f, Num cost, Ord cost, Ord state)
   -> state
   -- ^ Initial state
   -> Maybe (cost, [state])
-  -- (Total cost, list of steps) for the first path found which satisfies the
+  -- ^ (Total cost, list of steps) for the first path found which satisfies the
   -- given predicate
 aStar next cost remaining found initial =
   -- A* can be viewed as a generalized search, with the search container being a
@@ -217,12 +217,13 @@ aStar next cost remaining found initial =
     snd2 = snd . snd
 
 
--- TODO: Update docs
+-- | @bfsM@ is a monadic version of 'bfs': it has support for monadic @next@ and
+-- @found@ parameters.
 bfsM :: (Monad m, Foldable f, Ord state)
   => (state -> m (f state))
   -- ^ Function to generate "next" states given a current state
   -> (state -> m Bool)
-  -- ^ Predicate to determine if solution found. 'bfs' returns a path to the
+  -- ^ Predicate to determine if solution found. 'bfsM' returns a path to the
   -- first state for which this predicate returns 'True'.
   -> state
   -- ^ Initial state
@@ -232,12 +233,13 @@ bfsM :: (Monad m, Foldable f, Ord state)
 bfsM = generalizedSearchM Seq.empty id (\_ _ -> False)
 
 
--- TODO: Update docs
+-- | @dfsM@ is a monadic version of 'dfs': it has support for monadic @next@ and
+-- @found@ parameters.
 dfsM :: (Monad m, Foldable f, Ord state)
   => (state -> m (f state))
   -- ^ Function to generate "next" states given a current state
   -> (state -> m Bool)
-  -- ^ Predicate to determine if solution found. 'dfs' returns a path to the
+  -- ^ Predicate to determine if solution found. 'dfsM' returns a path to the
   -- first state for which this predicate returns 'True'.
   -> state
   -- ^ Initial state
@@ -247,8 +249,8 @@ dfsM :: (Monad m, Foldable f, Ord state)
 dfsM =
   generalizedSearchM [] id (\_ _ -> True)
 
-
--- TODO: Update docs
+-- | @dijkstraM@ is a monadic version of 'dijkstra': it has support for monadic
+-- @next@, @cost@, and @found@ parameters.
 dijkstraM :: (Monad m, Foldable f, Num cost, Ord cost, Ord state)
   => (state -> m (f state))
   -- ^ Function to generate list of neighboring states given the current state
@@ -257,15 +259,16 @@ dijkstraM :: (Monad m, Foldable f, Num cost, Ord cost, Ord state)
   -- only called for adjacent states, so it is safe to have this function be
   -- partial for non-neighboring states.
   -> (state -> m Bool)
-  -- ^ Predicate to determine if solution found. 'dijkstra' returns the shortest
-  -- path to the first state for which this predicate returns 'True'.
+  -- ^ Predicate to determine if solution found. 'dijkstraM' returns the
+  -- shortest path to the first state for which this predicate returns 'True'.
   -> state
   -- ^ Initial state
   -> m (Maybe (cost, [state]))
   -- ^ (Total cost, list of steps) for the first path found which
   -- satisfies the given predicate
 dijkstraM nextM costM foundM initial =
-  fmap2 unpack $ generalizedSearchM emptyLIFOHeap snd leastCostly nextM' (foundM . snd) (0, initial)
+  fmap2 unpack $ generalizedSearchM emptyLIFOHeap snd leastCostly nextM'
+    (foundM . snd) (0, initial)
   where
     nextM' (old_cost, old_st) = do
       new_states <- Foldable.toList <$> nextM old_st
@@ -276,7 +279,8 @@ dijkstraM nextM costM foundM initial =
     unpack packed_states = (fst . last $ packed_states, map snd packed_states)
 
 
--- TODO: Update docs
+-- | @aStarM@ is a monadic version of 'aStar': it has support for monadic
+-- @next@, @cost@, @remaining@, and @found@ parameters.
 aStarM :: (Monad m, Foldable f, Num cost, Ord cost, Ord state)
   => (state -> m (f state))
   -- ^ Function which, when given the current state, produces a list whose
@@ -289,22 +293,17 @@ aStarM :: (Monad m, Foldable f, Num cost, Ord cost, Ord state)
   -> (state -> m cost)
   -- ^ Estimate on remaining cost given a state
   -> (state -> m Bool)
-  -- ^ Predicate to determine if solution found. 'aStar' returns the shortest
+  -- ^ Predicate to determine if solution found. 'aStarM' returns the shortest
   -- path to the first state for which this predicate returns 'True'.
   -> state
   -- ^ Initial state
   -> m (Maybe (cost, [state]))
-  -- (Total cost, list of steps) for the first path found which satisfies the
+  -- ^ (Total cost, list of steps) for the first path found which satisfies the
   -- given predicate
 aStarM nextM costM remainingM foundM initial = do
-  -- A* can be viewed as a generalized search, with the search container being a
-  -- heap, with the states being compared without regard to cost, with the
-  -- shorter paths taking precedence over longer ones, and with
-  -- the stored state being (total cost estimate, (cost so far, state)).
-  -- This implementation makes that transformation, then transforms that result
-  -- back into the desired result from @aStar@
   remaining_init <- remainingM initial
-  fmap2 unpack $ generalizedSearchM emptyLIFOHeap snd2 leastCostly nextM' (foundM . snd2) (remaining_init, (0, initial))
+  fmap2 unpack $ generalizedSearchM emptyLIFOHeap snd2 leastCostly nextM'
+    (foundM . snd2) (remaining_init, (0, initial))
   where
     nextM' (_, (old_cost, old_st)) = do
       new_states <- Foldable.toList <$> nextM old_st
@@ -360,11 +359,19 @@ incrementalCosts ::
   -- ^ List of incremental costs along given path
 incrementalCosts cost_fn states = zipWith cost_fn states (tail states)
 
+-- | @incrementalCostsM@ is a monadic version of 'incrementalCosts': it has
+-- support for a monadic @const_fn@ parameter.
 incrementalCostsM ::
   (Monad m) =>
   (state -> state -> m cost)
+  -- ^ Function to generate list of costs between neighboring states. This is
+  -- only called for adjacent states in the `states` list, so it is safe to have
+  -- this function be partial for non-neighboring states.
   -> [state]
+  -- ^ A path, given as a list of adjacent states, along which to find the
+  -- incremental costs
   -> m [cost]
+  -- ^ List of incremental costs along given path
 incrementalCostsM costM states = zipWithM costM states (tail states)
 
 
@@ -408,11 +415,16 @@ next `pruning` predicate =
   (filter (not . predicate) . Foldable.toList) <$> next
 
 
+-- | @pruningM@ is a monadic version of 'pruning': it has support for monadic
+-- @next@ and @predicate@ parameters
 pruningM ::
   (Monad m, Foldable f)
   => (a -> m (f a))
+  -- ^ Function to generate next states
   -> (a -> m Bool)
+  -- ^ Predicate to prune on
   -> (a -> m [a])
+  -- ^ Version of @next@ which excludes elements satisfying @predicate@
 pruningM nextM predicateM a = do
   next_states <- nextM a
   filterM (fmap not. predicateM) $ Foldable.toList next_states
@@ -507,7 +519,8 @@ generalizedSearch empty mk_key better next found initial =
 -- | @nextSearchState@ moves from one @searchState@ to the next in the
 -- generalized search algorithm
 nextSearchStateM ::
-  (Monad m, Foldable f, SearchContainer container, Ord stateKey, Elem container ~ state)
+  (Monad m, Foldable f, SearchContainer container, Ord stateKey,
+   Elem container ~ state)
   => ([state] -> [state] -> Bool)
   -> (state -> stateKey)
   -> (state -> m (f state))
@@ -530,7 +543,8 @@ nextSearchStateM better mk_key nextM old = do
       paths = new_paths
       }
     new_queue_paths_M =
-      List.foldl' update_queue_paths (queue old, paths old) <$> nextM (current old)
+      List.foldl' update_queue_paths (queue old, paths old)
+        <$> nextM (current old)
     update_queue_paths (old_queue, old_paths) st =
       if mk_key st `Set.member` visited old
       then (old_queue, old_paths)
@@ -547,8 +561,10 @@ nextSearchStateM better mk_key nextM old = do
           ps' = Map.insert (mk_key st) (st : steps_so_far) old_paths
 
 
+-- | @generalizedSearchM@ is a monadic version of generalizedSearch
 generalizedSearchM ::
-  (Monad m, Foldable f, SearchContainer container, Ord stateKey, Elem container ~ state)
+  (Monad m, Foldable f, SearchContainer container, Ord stateKey,
+   Elem container ~ state)
   => container
   -- ^ Empty @SearchContainer@
   -> (state -> stateKey)
@@ -572,7 +588,8 @@ generalizedSearchM empty mk_key better nextM foundM initial = do
   let initial_state =
         SearchState initial empty (Set.singleton $ mk_key initial)
         (Map.singleton (mk_key initial) [])
-  end_May <- findIterateM (nextSearchStateM better mk_key nextM) (foundM . current) initial_state
+  end_May <- findIterateM (nextSearchStateM better mk_key nextM)
+    (foundM . current) initial_state
   return $ fmap (reverse . get_steps) end_May
   where
     get_steps search_st = paths search_st Map.! mk_key (current search_st)
@@ -628,6 +645,7 @@ findIterate next found initial
   | otherwise = next initial >>= findIterate next found
 
 
+-- | @findIterateM@ is a monadic version of @findIterate@
 findIterateM :: Monad m => (a -> m (Maybe a)) -> (a -> m Bool) -> a -> m (Maybe a)
 findIterateM nextM foundM initial = do
   found <- foundM initial
@@ -651,5 +669,6 @@ leastCostly [] _ = False
 leastCostly _ [] = True
 
 
+-- | This is just a convenience function which @fmap@s two deep
 fmap2 :: (Functor f1, Functor f2) => (a -> b) -> f1 (f2 a) -> f1 (f2 b)
 fmap2 = fmap . fmap
