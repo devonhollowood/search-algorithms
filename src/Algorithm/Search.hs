@@ -20,7 +20,9 @@ module Algorithm.Search (
   aStarM,
   -- * Utility
   incrementalCosts,
-  pruning
+  incrementalCostsM,
+  pruning,
+  pruningM
   ) where
 
 import qualified Data.Map as Map
@@ -28,6 +30,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.List as List
 import qualified Data.Foldable as Foldable
+import Control.Monad (filterM, zipWithM)
 
 -- | @bfs next found initial@ performs a breadth-first search over a set of
 -- states, starting with @initial@, and generating neighboring states with
@@ -77,7 +80,9 @@ bfs =
 -- Just [3,4]
 dfs :: (Foldable f, Ord state)
   => (state -> f state)
-  -- ^ Function to generate "next" states given a current state
+  -- ^ Function to generate "next" states given a current state. These should be
+  -- given in the order in which states should be pushed onto the stack, i.e.
+  -- the "last" state in the Foldable will be the first one visited.
   -> (state -> Bool)
   -- ^ Predicate to determine if solution found. 'dfs' returns a path to the
   -- first state for which this predicate returns 'True'.
@@ -264,7 +269,8 @@ dijkstraM nextM costM foundM initial =
   where
     nextM' (old_cost, old_st) = do
       new_states <- Foldable.toList <$> nextM old_st
-      new_costs <- fmap2 (+ old_cost) $ sequence (costM old_st <$> new_states)
+      incr_costs <- sequence $ costM old_st <$> new_states
+      let new_costs = (+ old_cost) <$> incr_costs
       return $ zip new_costs new_states
     unpack [] = (0, [])
     unpack packed_states = (fst . last $ packed_states, map snd packed_states)
@@ -354,6 +360,13 @@ incrementalCosts ::
   -- ^ List of incremental costs along given path
 incrementalCosts cost_fn states = zipWith cost_fn states (tail states)
 
+incrementalCostsM ::
+  (Monad m) =>
+  (state -> state -> m cost)
+  -> [state]
+  -> m [cost]
+incrementalCostsM costM states = zipWithM costM states (tail states)
+
 
 -- | @next \`pruning\` predicate@ streams the elements generate by @next@ into a
 -- list, removing elements which satisfy @predicate@. This is useful for the
@@ -393,6 +406,16 @@ pruning ::
   -- ^ Version of @next@ which excludes elements satisfying @predicate@
 next `pruning` predicate =
   (filter (not . predicate) . Foldable.toList) <$> next
+
+
+pruningM ::
+  (Monad m, Foldable f)
+  => (a -> m (f a))
+  -> (a -> m Bool)
+  -> (a -> m [a])
+pruningM nextM predicateM a = do
+  next_states <- nextM a
+  filterM (fmap not. predicateM) $ Foldable.toList next_states
 
 
 -- | A @SearchState@ represents the state of a generalized search at a given
