@@ -14,6 +14,7 @@ module Algorithm.Search (
   dijkstra,
   aStar,
   -- * Monadic Searches
+  -- $monadic
   bfsM,
   dfsM,
   dijkstraM,
@@ -216,6 +217,11 @@ aStar next cost remaining found initial =
       (fst . snd . last $ packed_states, map snd2 packed_states)
     snd2 = snd . snd
 
+-- $monadic
+-- Note that for all monadic searches, it is up to the user to ensure that
+-- side-effecting monads do not logically change the structure of the graph.
+-- For example, if the list of neighbors is being read from a file, the user
+-- must ensure that those values do not change between reads.
 
 -- | @bfsM@ is a monadic version of 'bfs': it has support for monadic @next@ and
 -- @found@ parameters.
