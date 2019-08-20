@@ -1,5 +1,5 @@
 name:                search-algorithms
-version:             0.3.0
+version:             0.3.1
 synopsis:            Common graph search algorithms
 description:         Library containing common graph search algorithms,
                      including depth-first and breadth-first searches,
@@ -19,7 +19,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     Algorithm.Search
   build-depends:       base >= 4.7 && < 5
-                     , containers >= 0.5 && < 0.6
+                     , containers >= 0.5 && < 0.7
   ghc-options:         -Wall
   default-language:    Haskell2010
 
