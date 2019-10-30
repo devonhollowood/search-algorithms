@@ -1,2 +1,3 @@
 .stack-work/
 *.tar.gz
+*.lock
