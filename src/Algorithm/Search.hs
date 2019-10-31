@@ -31,6 +31,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.List as List
 import qualified Data.Foldable as Foldable
+import Data.Functor.Identity -- Identity, runIdentity
 import Control.Monad (filterM, zipWithM)
 
 -- | @bfs next found initial@ performs a breadth-first search over a set of
@@ -447,47 +448,6 @@ data SearchState container stateKey state = SearchState {
   paths :: Map.Map stateKey [state]
   }
 
-
--- | @nextSearchState@ moves from one @searchState@ to the next in the
--- generalized search algorithm
-nextSearchState ::
-  (Foldable f, SearchContainer container, Ord stateKey, Elem container ~ state)
-  => ([state] -> [state] -> Bool)
-  -> (state -> stateKey)
-  -> (state -> f state)
-  -> SearchState container stateKey state
-  -> Maybe (SearchState container stateKey state)
-nextSearchState better mk_key next old = do
-  new_state <- mk_search_state <$> pop new_queue
-  if mk_key (current new_state) `Set.member` visited old
-    then nextSearchState better mk_key next new_state
-    else Just new_state
-  where
-    mk_search_state (new_current, remaining_queue) = SearchState {
-      current = new_current,
-      queue = remaining_queue,
-      visited = Set.insert (mk_key new_current) (visited old),
-      paths = new_paths
-      }
-    new_states = next (current old)
-    (new_queue, new_paths) =
-      List.foldl' update_queue_paths (queue old, paths old) new_states
-    update_queue_paths (old_queue, old_paths) st =
-      if mk_key st `Set.member` visited old
-      then (old_queue, old_paths)
-      else
-        case Map.lookup (mk_key st) old_paths of
-          Just old_path ->
-            if better old_path (st : steps_so_far)
-            then (q', ps')
-            else (old_queue, old_paths)
-          Nothing -> (q', ps')
-        where
-          steps_so_far = paths old Map.! mk_key (current old)
-          q' = push old_queue st
-          ps' = Map.insert (mk_key st) (st : steps_so_far) old_paths
-
-
 -- | Workhorse simple search algorithm, generalized over search container
 -- and path-choosing function. The idea here is that many search algorithms are
 -- at their core the same, with these details substituted. By writing these
@@ -514,13 +474,8 @@ generalizedSearch ::
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-generalizedSearch empty mk_key better next found initial =
-  let get_steps search_st = paths search_st Map.! mk_key (current search_st)
-  in fmap (reverse . get_steps)
-     . findIterate (nextSearchState better mk_key next) (found . current)
-     $ SearchState initial empty (Set.singleton $ mk_key initial)
-       (Map.singleton (mk_key initial) [])
-
+generalizedSearch empty mk_key better next found initial = runIdentity $
+  generalizedSearchM empty mk_key better (Identity . next) (Identity . found) initial
 
 -- | @nextSearchState@ moves from one @searchState@ to the next in the
 -- generalized search algorithm
@@ -641,14 +596,6 @@ instance Ord k => SearchContainer (LIFOHeap k a) where
       (_, []) -> pop (LIFOHeap $ Map.deleteMin inner)
                  -- Logically, this should never happen
   push (LIFOHeap inner) (k, a) = LIFOHeap $ Map.insertWith (++) k [a] inner
-
-
--- | @findIterate found next initial@ takes an initial seed value and applies
--- @next@ to it until either @found@ returns True or @next@ returns @Nothing@
-findIterate :: (a -> Maybe a) -> (a -> Bool) -> a -> Maybe a
-findIterate next found initial
-  | found initial = Just initial
-  | otherwise = next initial >>= findIterate next found
 
 
 -- | @findIterateM@ is a monadic version of @findIterate@
