@@ -31,7 +31,7 @@ import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.List as List
 import qualified Data.Foldable as Foldable
-import Data.Functor.Identity -- Identity, runIdentity
+import Data.Functor.Identity (Identity(..))
 import Control.Monad (filterM, zipWithM)
 
 -- | @bfs next found initial@ performs a breadth-first search over a set of
