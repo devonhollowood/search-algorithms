@@ -14,6 +14,7 @@ module Algorithm.Search (
   dijkstra,
   dijkstraAssoc,
   aStar,
+  aStarAssoc,
   -- * Monadic Searches
   -- $monadic
   bfsM,
