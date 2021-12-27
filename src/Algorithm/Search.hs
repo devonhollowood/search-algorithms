@@ -12,6 +12,7 @@ module Algorithm.Search (
   bfs,
   dfs,
   dijkstra,
+  dijkstraAssoc,
   aStar,
   -- * Monadic Searches
   -- $monadic
@@ -140,19 +141,49 @@ dijkstra :: (Foldable f, Num cost, Ord cost, Ord state)
   -- ^ (Total cost, list of steps) for the first path found which
   -- satisfies the given predicate
 dijkstra next cost found initial =
+  -- This API to Dijkstra's algorithm is useful when the state transition
+  -- function and the cost function are logically separate.
+  -- It is implemented by using @dijkstraAssoc@ with appropriate mapping of
+  -- arguments.
+  dijkstraAssoc next' found initial
+  where
+    next' st = map (\new_st -> (new_st, cost st new_st)) $
+               Foldable.toList (next st)
+
+-- | @dijkstraAssoc next found initial@ performs a shortest-path search over
+-- a set of states using Dijkstra's algorithm, starting with @initial@,
+-- generating neighboring states with associated incremenal costs with
+-- @next@. This will find the least-costly path from an initial state to a
+-- state for which @found@ returns 'True'. Returns 'Nothing' if no path to a
+-- solved state is possible.
+dijkstraAssoc :: (Num cost, Ord cost, Ord state)
+  => (state -> [(state, cost)])
+  -- ^ function to generate list of neighboring states with associated
+  -- transition costs given the current state
+  -> (state -> Bool)
+  -- ^ Predicate to determine if solution found. 'dijkstraAssoc' returns the
+  -- shortest path to the first state for which this predicate returns 'True'.
+  -> state
+  -- ^ Initial state
+  -> Maybe (cost, [state])
+  -- ^ (Total cost, list of steps) for the first path found which
+  -- satisfies the given predicate
+dijkstraAssoc next found initial =
+  -- This API to Dijkstra's algoritm is useful in the common case when next
+  -- states and their associated transition costs are generated together.
   -- Dijkstra's algorithm can be viewed as a generalized search, with the search
   -- container being a heap, with the states being compared without regard to
   -- cost, with the shorter paths taking precedence over longer ones, and with
   -- the stored state being (cost so far, state).
   -- This implementation makes that transformation, then transforms that result
-  -- back into the desired result from @dijkstra@
+  -- back into the desired result from @dijkstraAssoc@
   unpack <$>
     generalizedSearch emptyLIFOHeap snd leastCostly next' (found . snd)
       (0, initial)
   where
     next' (old_cost, st) =
-      (\new_st -> (cost st new_st + old_cost, new_st))
-        <$> Foldable.toList (next st)
+      (\(new_st, new_cost) -> (new_cost + old_cost, new_st))
+        <$> (next st)
     unpack [] = (0, [])
     unpack packed_states = (fst . last $ packed_states, map snd packed_states)
 
