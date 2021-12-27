@@ -129,7 +129,7 @@ dijkstra :: (Foldable f, Num cost, Ord cost, Ord state)
   => (state -> f state)
   -- ^ Function to generate list of neighboring states given the current state
   -> (state -> state -> cost)
-  -- ^ Function to generate list of costs between neighboring states. This is
+  -- ^ Function to generate transition costs between neighboring states. This is
   -- only called for adjacent states, so it is safe to have this function be
   -- partial for non-neighboring states.
   -> (state -> Bool)
@@ -171,6 +171,7 @@ dijkstraAssoc :: (Num cost, Ord cost, Ord state)
 dijkstraAssoc next found initial =
   -- This API to Dijkstra's algoritm is useful in the common case when next
   -- states and their associated transition costs are generated together.
+  --
   -- Dijkstra's algorithm can be viewed as a generalized search, with the search
   -- container being a heap, with the states being compared without regard to
   -- cost, with the shorter paths taking precedence over longer ones, and with
@@ -210,11 +211,9 @@ dijkstraAssoc next found initial =
 -- Just (4,[(1,0),(1,1),(1,2),(0,2)])
 aStar :: (Foldable f, Num cost, Ord cost, Ord state)
   => (state -> f state)
-  -- ^ Function which, when given the current state, produces a list whose
-  -- elements are (incremental cost to reach neighboring state,
-  -- estimate on remaining cost from said state, said state).
+  -- ^ Function to generate list of neighboring states given the current state
   -> (state -> state -> cost)
-  -- ^ Function to generate list of costs between neighboring states. This is
+  -- ^ Function to generate transition costs between neighboring states. This is
   -- only called for adjacent states, so it is safe to have this function be
   -- partial for non-neighboring states.
   -> (state -> cost)
@@ -228,20 +227,54 @@ aStar :: (Foldable f, Num cost, Ord cost, Ord state)
   -- ^ (Total cost, list of steps) for the first path found which satisfies the
   -- given predicate
 aStar next cost remaining found initial =
+  -- This API to A* search is useful when the state transition
+  -- function and the cost function are logically separate.
+  -- It is implemented by using @aStarAssoc@ with appropriate mapping of
+  -- arguments.
+  aStarAssoc next' remaining found initial
+  where
+    next' st = map (\new_st -> (new_st, cost st new_st)) $
+               Foldable.toList (next st)
+
+-- | @aStarAssoc next remaining found initial@ performs a best-first search
+-- using the A* search algorithm, starting with the state @initial@, generating
+-- neighboring states and their associated costs with @next@, and an estimate of
+-- the remaining cost with @remaining@. This returns a path to a state for which
+-- @found@ returns 'True'. If @remaining@ is strictly a lower bound on the
+-- remaining cost to reach a solved state, then the returned path is the
+-- shortest path. Returns 'Nothing' if no path to a solved state is possible.
+aStarAssoc :: (Num cost, Ord cost, Ord state)
+  => (state -> [(state, cost)])
+  -- ^ function to generate list of neighboring states with associated
+  -- transition costs given the current state
+  -> (state -> cost)
+  -- ^ Estimate on remaining cost given a state
+  -> (state -> Bool)
+  -- ^ Predicate to determine if solution found. 'aStar' returns the shortest
+  -- path to the first state for which this predicate returns 'True'.
+  -> state
+  -- ^ Initial state
+  -> Maybe (cost, [state])
+  -- ^ (Total cost, list of steps) for the first path found which satisfies the
+  -- given predicate
+aStarAssoc next remaining found initial =
+  -- This API to A* search is useful in the common case when next
+  -- states and their associated transition costs are generated together.
+  --
   -- A* can be viewed as a generalized search, with the search container being a
   -- heap, with the states being compared without regard to cost, with the
   -- shorter paths taking precedence over longer ones, and with
   -- the stored state being (total cost estimate, (cost so far, state)).
   -- This implementation makes that transformation, then transforms that result
-  -- back into the desired result from @aStar@
+  -- back into the desired result from @aStarAssoc@
   unpack <$> generalizedSearch emptyLIFOHeap snd2 leastCostly next'
     (found . snd2) (remaining initial, (0, initial))
   where
     next' (_, (old_cost, old_st)) =
-      update_state <$> Foldable.toList (next old_st)
+      update_state <$> (next old_st)
       where
-        update_state new_st =
-          let new_cost = old_cost + cost old_st new_st
+        update_state (new_st, cost) =
+          let new_cost = old_cost + cost
               new_est = new_cost + remaining new_st
           in (new_est, (new_cost, new_st))
     unpack [] = (0, [])
