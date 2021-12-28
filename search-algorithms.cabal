@@ -13,6 +13,7 @@ copyright:           2017 Devon Hollowood
 category:            Algorithm
 build-type:          Simple
 extra-source-files:  README.md
+                   , CHANGELOG.md
 cabal-version:       >=1.10
 
 library
