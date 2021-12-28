@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.3.2] - 2021-12-27
+- Add two new functions, `dijkstraAssoc` and `aStarAssoc`. These allow for the simultaneous
+  computation of neighboring states and their costs.
+
 ## [0.3.1] - 2010-08-19
 - Dependencies version bump
 
