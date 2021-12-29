@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.3.2] - 2021-12-27
+- Add two new functions, `dijkstraAssoc` and `aStarAssoc`. These allow for the simultaneous
+  computation of neighboring states and their costs. (Thank you to
+  [nagydani](https://github.com/nagydani))
+
 ## [0.3.1] - 2010-08-19
 - Dependencies version bump
 
@@ -24,6 +29,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## 0.1.0 - 2017-03-07
 - Initial release
 
+[0.3.2]: https://github.com/devonhollowood/search-algorithms/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/devonhollowood/search-algorithms/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/devonhollowood/search-algorithms/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/devonhollowood/search-algorithms/compare/v0.1.0...v0.2.0

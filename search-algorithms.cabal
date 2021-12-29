@@ -1,5 +1,5 @@
 name:                search-algorithms
-version:             0.3.1
+version:             0.3.2
 synopsis:            Common graph search algorithms
 description:         Library containing common graph search algorithms,
                      including depth-first and breadth-first searches,
@@ -13,6 +13,7 @@ copyright:           2017 Devon Hollowood
 category:            Algorithm
 build-type:          Simple
 extra-source-files:  README.md
+                   , CHANGELOG.md
 cabal-version:       >=1.10
 
 library
