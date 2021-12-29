@@ -20,7 +20,9 @@ module Algorithm.Search (
   bfsM,
   dfsM,
   dijkstraM,
+  dijkstraAssocM,
   aStarM,
+  aStarAssocM,
   -- * Utility
   incrementalCosts,
   incrementalCostsM,
@@ -351,13 +353,37 @@ dijkstraM nextM costM foundM initial =
     unpack packed_states = (fst . last $ packed_states, map snd packed_states)
 
 
+-- | @dijkstraAssocM@ is a monadic version of 'dijkstraAssoc': it has support
+-- for monadic @next@ and @found@ parameters.
+dijkstraAssocM :: (Monad m, Num cost, Ord cost, Ord state)
+  => (state -> m [(state, cost)])
+  -- ^ Function to generate list of neighboring states with associated 
+  -- transition costs given the current state
+  -> (state -> m Bool)
+  -- ^ Predicate to determine if solution found. 'dijkstraM' returns the
+  -- shortest path to the first state for which this predicate returns 'True'.
+  -> state
+  -- ^ Initial state
+  -> m (Maybe (cost, [state]))
+  -- ^ (Total cost, list of steps) for the first path found which
+  -- satisfies the given predicate
+dijkstraAssocM nextM foundM initial =
+  fmap2 unpack $ generalizedSearchM emptyLIFOHeap snd leastCostly nextM'
+    (foundM . snd) (0, initial)
+  where
+    nextM' (old_cost, old_st) = do
+      new_states <- nextM old_st
+      return $ map (\(x, y) -> (y, x)) new_states
+    unpack [] = (0, [])
+    unpack packed_states = (fst . last $ packed_states, map snd packed_states)
+
+
 -- | @aStarM@ is a monadic version of 'aStar': it has support for monadic
 -- @next@, @cost@, @remaining@, and @found@ parameters.
 aStarM :: (Monad m, Foldable f, Num cost, Ord cost, Ord state)
   => (state -> m (f state))
-  -- ^ Function which, when given the current state, produces a list whose
-  -- elements are (incremental cost to reach neighboring state,
-  -- estimate on remaining cost from said state, said state).
+  -- ^ function to generate list of neighboring states with associated
+  -- transition costs given the current state
   -> (state -> state -> m cost)
   -- ^ Function to generate list of costs between neighboring states. This is
   -- only called for adjacent states, so it is safe to have this function be
@@ -387,6 +413,42 @@ aStarM nextM costM remainingM foundM initial = do
           let new_cost = old_cost + cost
               new_est = new_cost + remaining
           return (new_est, (new_cost, new_st))
+    unpack [] = (0, [])
+    unpack packed_states =
+      (fst . snd . last $ packed_states, map snd2 packed_states)
+    snd2 = snd . snd
+
+
+-- | @aStarAssocM@ is a monadic version of 'aStarAssoc': it has support for
+-- monadic  @next@, @remaining@, and @found@ parameters.
+aStarAssocM :: (Monad m, Num cost, Ord cost, Ord state)
+  => (state -> m [(state, cost)])
+  -- ^ function to generate list of neighboring states with associated
+  -- transition costs given the current state
+  -> (state -> m cost)
+  -- ^ Estimate on remaining cost given a state
+  -> (state -> m Bool)
+  -- ^ Predicate to determine if solution found. 'aStarM' returns the shortest
+  -- path to the first state for which this predicate returns 'True'.
+  -> state
+  -- ^ Initial state
+  -> m (Maybe (cost, [state]))
+  -- ^ (Total cost, list of steps) for the first path found which satisfies the
+  -- given predicate
+aStarAssocM nextM remainingM foundM initial = do
+  remaining_init <- remainingM initial
+  fmap2 unpack $ generalizedSearchM emptyLIFOHeap snd2 leastCostly nextM'
+    (foundM . snd2) (remaining_init, (0, initial))
+  where
+    nextM' (_, (old_cost, old_st)) = do
+      new_states <- nextM old_st
+      sequence $ update_stateM <$> new_states
+      where
+        update_stateM new_st = do
+          remaining <- remainingM (fst new_st)
+          let new_cost = old_cost + (snd new_st)
+              new_est = new_cost + remaining
+          return (new_est, (new_cost, fst new_st))
     unpack [] = (0, [])
     unpack packed_states =
       (fst . snd . last $ packed_states, map snd2 packed_states)
