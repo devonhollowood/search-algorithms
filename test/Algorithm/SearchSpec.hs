@@ -274,3 +274,15 @@ spec = do
       incrementalCostsM costM ['a'] `shouldBe` Just []
     it "correctly handles monadic behavior" $
       incrementalCostsM costM ['a', 'd'] `shouldBe` Nothing
+  describe "pruning" $ do
+    it "filters according to its predicate" $
+      ((\x -> [x, 2*x, 3*x]) `pruning` even) 3 `shouldBe` [3, 9]
+  describe "pruningAssoc" $ do
+    it "filters according to its predicate" $
+      ((\x -> [(x, 1), (2*x, 2)]) `pruningAssoc` (\(_, cost) -> cost > 1)) 3 `shouldBe` [(3, 1)]
+  describe "pruningM" $ do
+    it "filters according to its predicate" $
+      ((\x -> (Just [x, 2*x, 3*x])) `pruningM` (\x -> Just (even x))) 3 `shouldBe` Just [3, 9]
+  describe "pruningAssocM" $ do
+     it "filters according to its predicate" $
+       ((\x -> Just [(x, 1), (2*x, 2)]) `pruningAssocM` (\(_, cost) -> Just (cost > 1))) 3 `shouldBe` Just [(3, 1)]

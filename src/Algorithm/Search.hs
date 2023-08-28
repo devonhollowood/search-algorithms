@@ -27,7 +27,9 @@ module Algorithm.Search (
   incrementalCosts,
   incrementalCostsM,
   pruning,
-  pruningM
+  pruningAssoc,
+  pruningM,
+  pruningAssocM
   ) where
 
 import qualified Data.Map as Map
@@ -357,7 +359,7 @@ dijkstraM nextM costM foundM initial =
 -- for monadic @next@ and @found@ parameters.
 dijkstraAssocM :: (Monad m, Num cost, Ord cost, Ord state)
   => (state -> m [(state, cost)])
-  -- ^ Function to generate list of neighboring states with associated 
+  -- ^ Function to generate list of neighboring states with associated
   -- transition costs given the current state
   -> (state -> m Bool)
   -- ^ Predicate to determine if solution found. 'dijkstraM' returns the
@@ -549,6 +551,18 @@ next `pruning` predicate =
   (filter (not . predicate) . Foldable.toList) <$> next
 
 
+-- | @pruningAssoc@ is a version of 'pruning' that works with the `Assoc` variants of searches.
+pruningAssoc ::
+  (Foldable f)
+  => (state -> f (state, cost))
+  -- ^ Function to generate next states
+  -> ((state, cost) -> Bool)
+  -- ^ Predicate to prune on
+  -> (state -> [(state, cost)])
+  -- ^ Version of @next@ which excludes elements satisfying @predicate@
+next `pruningAssoc` predicate =
+  (filter (not . predicate) . Foldable.toList) <$> next
+
 -- | @pruningM@ is a monadic version of 'pruning': it has support for monadic
 -- @next@ and @predicate@ parameters
 pruningM ::
@@ -561,7 +575,21 @@ pruningM ::
   -- ^ Version of @next@ which excludes elements satisfying @predicate@
 pruningM nextM predicateM a = do
   next_states <- nextM a
-  filterM (fmap not. predicateM) $ Foldable.toList next_states
+  filterM (fmap not . predicateM) $ Foldable.toList next_states
+
+-- | @pruningAssocM@ is a monadic version of 'pruningAssoc': it has support for monadic
+-- @next@ and @predicate@ parameters
+pruningAssocM ::
+  (Monad m, Foldable f)
+  => (state -> m (f (state, cost)))
+  -- ^ Function to generate next states
+  -> ((state, cost) -> m Bool)
+  -- ^ Predicate to prune on
+  -> (state -> m [(state, cost)])
+  -- ^ Version of @next@ which excludes elements satisfying @predicate@
+pruningAssocM nextM predicateM a = do
+  next_states <- nextM a
+  filterM (fmap not . predicateM) $ Foldable.toList next_states
 
 
 -- | A @SearchState@ represents the state of a generalized search at a given
