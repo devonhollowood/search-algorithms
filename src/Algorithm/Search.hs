@@ -14,6 +14,7 @@ module Algorithm.Search (
   dfs,
   dijkstra,
   dijkstraAssoc,
+  dijkstraAssocCost,
   aStar,
   aStarAssoc,
   -- * Monadic Searches
@@ -22,6 +23,7 @@ module Algorithm.Search (
   dfsM,
   dijkstraM,
   dijkstraAssocM,
+  dijkstraAssocCostM,
   aStarM,
   aStarAssocM,
   -- * Utility
@@ -40,6 +42,7 @@ import qualified Data.List as List
 import qualified Data.Foldable as Foldable
 import Data.Functor.Identity (Identity(..))
 import Control.Monad (filterM, zipWithM)
+import Data.Tuple (swap)
 
 -- | @bfs next found initial@ performs a breadth-first search over a set of
 -- states, starting with @initial@, and generating neighboring states with
@@ -191,6 +194,44 @@ dijkstraAssoc next found initial =
     next' (old_cost, st) =
       (\(new_st, new_cost) -> (new_cost + old_cost, new_st))
         <$> (next st)
+    unpack [] = (0, [])
+    unpack packed_states = (fst . last $ packed_states, map snd packed_states)
+
+-- | @dijkstraAssocCost next found initial@ performs a shortest-path search over
+-- a set of states using Dijkstra's algorithm, starting with @initial@,
+-- generating neighboring states with associated path costs with @next@ (this
+-- means that the path of a cost is not the sum of the previous cost and the
+-- cost of the current transition, @next@ can do arbitrary computations using
+-- those two costs, like a weighted sum or a probability combination). This will
+-- find the least-costly path from an initial state to a state for which @found@
+-- returns 'True'. Returns 'Nothing' if no path to a solved state is possible.
+dijkstraAssocCost :: (Num cost, Ord cost, Ord state)
+  => ((state, cost) -> [(state, cost)])
+  -- ^ function to generate list of neighboring states with associated
+  -- transition costs given the current state
+  -> (state -> Bool)
+  -- ^ Predicate to determine if solution found. 'dijkstraAssoc' returns the
+  -- shortest path to the first state for which this predicate returns 'True'.
+  -> state
+  -- ^ Initial state
+  -> Maybe (cost, [state])
+  -- ^ (Total cost, list of steps) for the first path found which
+  -- satisfies the given predicate
+dijkstraAssocCost next found initial =
+  -- This API to Dijkstra's algoritm is useful in the common case when next
+  -- states and their associated transition costs are generated together.
+  --
+  -- Dijkstra's algorithm can be viewed as a generalized search, with the search
+  -- container being a heap, with the states being compared without regard to
+  -- cost, with the shorter paths taking precedence over longer ones, and with
+  -- the stored state being (cost so far, state).
+  -- This implementation makes that transformation, then transforms that result
+  -- back into the desired result from @dijkstraAssoc@
+  unpack <$>
+    generalizedSearch emptyLIFOHeap snd leastCostly next' (found . snd)
+      (0, initial)
+  where
+    next' = map swap . next . swap
     unpack [] = (0, [])
     unpack packed_states = (fst . last $ packed_states, map snd packed_states)
 
@@ -377,6 +418,29 @@ dijkstraAssocM nextM foundM initial =
     nextM' (old_cost, old_st) = do
       new_states <- nextM old_st
       return $ map (\(x, y) -> (y, x)) new_states
+    unpack [] = (0, [])
+    unpack packed_states = (fst . last $ packed_states, map snd packed_states)
+
+
+-- | @dijkstraAssocCostM@ is a monadic version of 'dijkstraAssocCost': it has
+-- support for monadic @next@ and @found@ parameters.
+dijkstraAssocCostM :: (Monad m, Num cost, Ord cost, Ord state)
+  => ((state, cost) -> m [(state, cost)])
+  -- ^ Function to generate list of neighboring states with associated
+  -- path costs given the current state
+  -> (state -> m Bool)
+  -- ^ Predicate to determine if solution found. 'dijkstraM' returns the
+  -- shortest path to the first state for which this predicate returns 'True'.
+  -> state
+  -- ^ Initial state
+  -> m (Maybe (cost, [state]))
+  -- ^ (Total cost, list of steps) for the first path found which
+  -- satisfies the given predicate
+dijkstraAssocCostM nextM foundM initial =
+  fmap2 unpack $ generalizedSearchM emptyLIFOHeap snd leastCostly nextM'
+    (foundM . snd) (0, initial)
+  where
+    nextM' = fmap2 swap . nextM . swap
     unpack [] = (0, [])
     unpack packed_states = (fst . last $ packed_states, map snd packed_states)
 
