@@ -105,6 +105,21 @@ spec = do
         `shouldBe` Nothing
     it "handles zero-length solutions" $
       dijkstra next cost (== 'd') 'd' `shouldBe` Just (0, [])
+  describe "dijkstra with cost" $ do
+    let new_cost old_cost (char, step_cost) = (char, old_cost * 10 + step_cost)
+        next (char, cost) = map (new_cost cost) (cyclicWeightedGraph Map.! char)
+        isChar char1 (char2, _cost) = char1 == char2
+    it "performs dijkstra's algorithm" $
+      dijkstraAssocCost next (== 'd') 'a'
+        `shouldBe` Just (15, ['b', 'd'])
+    it "handles pruning" $
+      dijkstraAssocCost (next `pruning` isChar 'b') (== 'd') 'a'
+        `shouldBe` Just (22, ['c', 'd'])
+    it "returns Nothing when no path is possible" $
+      dijkstraAssocCost (next `pruning` isChar 'b' `pruning` isChar 'c') (== 'd') 'a'
+        `shouldBe` Nothing
+    it "handles zero-length solutions" $
+      dijkstraAssocCost next (== 'd') 'd' `shouldBe` Just (0, [])
   describe "aStar" $ do
     let start = (0, 0)
         end = (2, 0)
@@ -210,6 +225,42 @@ spec = do
       dijkstraM
         (taxicabNeighborsBounded `pruningM` (return . isBigWall))
         taxicabDistanceBounded
+        (const Nothing)
+        start
+        `shouldBe` Nothing
+  describe "dijkstraAssocCostM" $ do
+    let start = (0, 0)
+        end = (2, 0)
+        taxicabNeighborsBounded' (from, cost1) = do
+          tos <- taxicabNeighborsBounded from
+          cost2s <- mapM (taxicabDistanceBounded from) tos
+          pure $ zip tos $ (cost1 +) <$> cost2s
+    it "performs monadic dijkstra's algorithm" $
+      dijkstraAssocCostM
+        taxicabNeighborsBounded'
+        (return . (== end))
+        start
+        `shouldBe` Just (Just (2, [(1, 0), (2, 0)]))
+    it "handles cyclic graphs" $ do
+      let nextM (char, cost) = return $ fmap (cost +) <$> (cyclicWeightedGraph Map.! char)
+          isChar char1 (char2, _cost) = char1 == char2
+      dijkstraAssocCostM nextM (return . (== 'd')) 'a'
+        `shouldBe` Just (Just (4, ['c', 'd']))
+      dijkstraAssocCostM (nextM `pruningM` (return . isChar 'c'))
+        (return . (== 'd')) 'a'
+        `shouldBe` Just (Just (6, ['b', 'd']))
+    it "handles zero-length solutions" $ do
+      let nextM (char, cost) = return $ fmap (cost +) <$> (cyclicWeightedGraph Map.! char)
+      dijkstraAssocCostM nextM  (return . (== 'd')) 'd'
+        `shouldBe` Just (Just (0, []))
+    it "correctly handles monadic behavior" $ do
+      dijkstraAssocCostM
+        (taxicabNeighborsBounded' `pruningM` (return . isBigWall . fst))
+        (return . (== end))
+        start
+        `shouldBe` Nothing
+      dijkstraAssocCostM
+        (taxicabNeighborsBounded' `pruningM` (return . isBigWall . fst))
         (const Nothing)
         start
         `shouldBe` Nothing
