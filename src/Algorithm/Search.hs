@@ -71,10 +71,10 @@ bfs :: (Foldable f, Ord state)
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-bfs =
+bfs next found  =
   -- BFS is a generalized search using a queue, which directly compares states,
   -- and which always uses the first path found to a state
-  generalizedSearch Seq.empty id (\_ _ -> False)
+  runIdentity . bfsM (Identity . next) (Identity . found)
 
 
 -- | @dfs next found initial@ performs a depth-first search over a set
@@ -103,10 +103,10 @@ dfs :: (Foldable f, Ord state)
   -> Maybe [state]
   -- ^ First path found to a state matching the predicate, or 'Nothing' if no
   -- such path exists.
-dfs =
+dfs next found =
   -- DFS is a generalized search using a stack, which directly compares states,
   -- and which always uses the most recent path found to a state
-  generalizedSearch [] id (\_ _ -> True)
+  runIdentity . dfsM (Identity . next) (Identity . found)
 
 
 -- | @dijkstra next cost found initial@ performs a shortest-path search over
@@ -149,15 +149,12 @@ dijkstra :: (Foldable f, Num cost, Ord cost, Ord state)
   -> Maybe (cost, [state])
   -- ^ (Total cost, list of steps) for the first path found which
   -- satisfies the given predicate
-dijkstra next cost found initial =
+dijkstra next cost found =
   -- This API to Dijkstra's algorithm is useful when the state transition
   -- function and the cost function are logically separate.
   -- It is implemented by using @dijkstraAssoc@ with appropriate mapping of
   -- arguments.
-  dijkstraAssoc next' found initial
-  where
-    next' st = map (\new_st -> (new_st, cost st new_st)) $
-               Foldable.toList (next st)
+  runIdentity . dijkstraM (Identity . next) (identity2 cost) (Identity . found)
 
 -- | @dijkstraAssoc next found initial@ performs a shortest-path search over
 -- a set of states using Dijkstra's algorithm, starting with @initial@,
@@ -177,7 +174,7 @@ dijkstraAssoc :: (Num cost, Ord cost, Ord state)
   -> Maybe (cost, [state])
   -- ^ (Total cost, list of steps) for the first path found which
   -- satisfies the given predicate
-dijkstraAssoc next found initial =
+dijkstraAssoc next found =
   -- This API to Dijkstra's algoritm is useful in the common case when next
   -- states and their associated transition costs are generated together.
   --
@@ -187,15 +184,7 @@ dijkstraAssoc next found initial =
   -- the stored state being (cost so far, state).
   -- This implementation makes that transformation, then transforms that result
   -- back into the desired result from @dijkstraAssoc@
-  unpack <$>
-    generalizedSearch emptyLIFOHeap snd leastCostly next' (found . snd)
-      (0, initial)
-  where
-    next' (old_cost, st) =
-      (\(new_st, new_cost) -> (new_cost + old_cost, new_st))
-        <$> (next st)
-    unpack [] = (0, [])
-    unpack packed_states = (fst . last $ packed_states, map snd packed_states)
+  runIdentity . dijkstraAssocM (Identity . next) (Identity . found)
 
 -- | @dijkstraAssocCost next found initial@ performs a shortest-path search over
 -- a set of states using Dijkstra's algorithm, starting with @initial@,
@@ -217,7 +206,7 @@ dijkstraAssocCost :: (Num cost, Ord cost, Ord state)
   -> Maybe (cost, [state])
   -- ^ (Total cost, list of steps) for the first path found which
   -- satisfies the given predicate
-dijkstraAssocCost next found initial =
+dijkstraAssocCost next found =
   -- This API to Dijkstra's algoritm is useful in the common case when next
   -- states and their associated transition costs are generated together.
   --
@@ -227,13 +216,7 @@ dijkstraAssocCost next found initial =
   -- the stored state being (cost so far, state).
   -- This implementation makes that transformation, then transforms that result
   -- back into the desired result from @dijkstraAssoc@
-  unpack <$>
-    generalizedSearch emptyLIFOHeap snd leastCostly next' (found . snd)
-      (0, initial)
-  where
-    next' = map swap . next . swap
-    unpack [] = (0, [])
-    unpack packed_states = (fst . last $ packed_states, map snd packed_states)
+  runIdentity . dijkstraAssocCostM (Identity . next) (Identity . found)
 
 
 -- | @aStar next cost remaining found initial@ performs a best-first search
@@ -273,15 +256,13 @@ aStar :: (Foldable f, Num cost, Ord cost, Ord state)
   -> Maybe (cost, [state])
   -- ^ (Total cost, list of steps) for the first path found which satisfies the
   -- given predicate
-aStar next cost remaining found initial =
+aStar next cost remaining found =
   -- This API to A* search is useful when the state transition
   -- function and the cost function are logically separate.
   -- It is implemented by using @aStarAssoc@ with appropriate mapping of
   -- arguments.
-  aStarAssoc next' remaining found initial
-  where
-    next' st = map (\new_st -> (new_st, cost st new_st)) $
-               Foldable.toList (next st)
+  runIdentity . aStarM (Identity . next) (identity2 cost) (Identity . remaining) (Identity . found)
+
 
 -- | @aStarAssoc next remaining found initial@ performs a best-first search
 -- using the A* search algorithm, starting with the state @initial@, generating
@@ -304,7 +285,7 @@ aStarAssoc :: (Num cost, Ord cost, Ord state)
   -> Maybe (cost, [state])
   -- ^ (Total cost, list of steps) for the first path found which satisfies the
   -- given predicate
-aStarAssoc next remaining found initial =
+aStarAssoc next remaining found =
   -- This API to A* search is useful in the common case when next
   -- states and their associated transition costs are generated together.
   --
@@ -314,20 +295,7 @@ aStarAssoc next remaining found initial =
   -- the stored state being (total cost estimate, (cost so far, state)).
   -- This implementation makes that transformation, then transforms that result
   -- back into the desired result from @aStarAssoc@
-  unpack <$> generalizedSearch emptyLIFOHeap snd2 leastCostly next'
-    (found . snd2) (remaining initial, (0, initial))
-  where
-    next' (_, (old_cost, old_st)) =
-      update_state <$> (next old_st)
-      where
-        update_state (new_st, cost) =
-          let new_cost = old_cost + cost
-              new_est = new_cost + remaining new_st
-          in (new_est, (new_cost, new_st))
-    unpack [] = (0, [])
-    unpack packed_states =
-      (fst . snd . last $ packed_states, map snd2 packed_states)
-    snd2 = snd . snd
+  runIdentity . aStarAssocM (Identity . next) (Identity . remaining) (Identity . found)
 
 -- $monadic
 -- Note that for all monadic searches, it is up to the user to ensure that
@@ -845,3 +813,7 @@ leastCostly _ [] = True
 -- | This is just a convenience function which @fmap@s two deep
 fmap2 :: (Functor f1, Functor f2) => (a -> b) -> f1 (f2 a) -> f1 (f2 b)
 fmap2 = fmap . fmap
+
+-- | This applies Identity to the result of a function of two arguments
+identity2 :: (a -> b ->c) -> a -> b -> Identity c
+identity2 f a b = Identity $ f a b
