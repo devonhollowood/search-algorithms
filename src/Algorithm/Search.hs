@@ -636,35 +636,6 @@ data SearchState container stateKey state = SearchState {
   paths :: Map.Map stateKey [state]
   }
 
--- | Workhorse simple search algorithm, generalized over search container
--- and path-choosing function. The idea here is that many search algorithms are
--- at their core the same, with these details substituted. By writing these
--- searches in terms of this function, we reduce the chances of errors sneaking
--- into each separate implementation.
-generalizedSearch ::
-  (Foldable f, SearchContainer container, Ord stateKey, Elem container ~ state)
-  => container
-  -- ^ Empty @SearchContainer@
-  -> (state -> stateKey)
-  -- ^ Function to turn a @state@ into a key by which states will be compared
-  -- when determining whether a state has be enqueued and / or visited
-  -> ([state] -> [state] -> Bool)
-  -- ^ Function @better old new@, which when given a choice between an @old@ and
-  -- a @new@ path to a state, returns True when @new@ is a "better" path than
-  -- old and should thus be inserted
-  -> (state -> f state)
-  -- ^ Function to generate "next" states given a current state
-  -> (state -> Bool)
-  -- ^ Predicate to determine if solution found. @generalizedSearch@ returns a
-  -- path to the first state for which this predicate returns 'True'.
-  -> state
-  -- ^ Initial state
-  -> Maybe [state]
-  -- ^ First path found to a state matching the predicate, or 'Nothing' if no
-  -- such path exists.
-generalizedSearch empty mk_key better next found initial = runIdentity $
-  generalizedSearchM empty mk_key better (Identity . next) (Identity . found) initial
-
 -- | @nextSearchState@ moves from one @searchState@ to the next in the
 -- generalized search algorithm
 nextSearchStateM ::
@@ -710,7 +681,11 @@ nextSearchStateM better mk_key nextM old = do
           ps' = Map.insert (mk_key st) (st : steps_so_far) old_paths
 
 
--- | @generalizedSearchM@ is a monadic version of generalizedSearch
+-- | Workhorse simple search algorithm, generalized over search container
+-- and path-choosing function. The idea here is that many search algorithms are
+-- at their core the same, with these details substituted. By writing these
+-- searches in terms of this function, we reduce the chances of errors sneaking
+-- into each separate implementation.
 generalizedSearchM ::
   (Monad m, Foldable f, SearchContainer container, Ord stateKey,
    Elem container ~ state)
