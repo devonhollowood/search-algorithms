@@ -385,7 +385,8 @@ dijkstraAssocM nextM foundM initial =
   where
     nextM' (old_cost, old_st) = do
       new_states <- nextM old_st
-      return $ map (\(x, y) -> (y, x)) new_states
+      return $ map (update_st old_cost) new_states
+    update_st old_cost (new_st, new_cost) = (old_cost + new_cost, new_st)
     unpack [] = (0, [])
     unpack packed_states = (fst . last $ packed_states, map snd packed_states)
 
