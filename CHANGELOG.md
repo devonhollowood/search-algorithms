@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.3.5] - 2026-10-24
+- Bump version for `containers` dependency.
+- Clean up some GHC warnings.
+- Add `hie.yaml`.
+
 ## [0.3.4] - 2025-06-28
 - Add `dijkstraAssocCost` and `dijstraAssocCostM`, which make it easier to
   handle path-dependent costs.
@@ -38,6 +43,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## 0.1.0 - 2017-03-07
 - Initial release
 
+[0.3.5]: https://github.com/devonhollowood/search-algorithms/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/devonhollowood/search-algorithms/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/devonhollowood/search-algorithms/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/devonhollowood/search-algorithms/compare/v0.3.1...v0.3.2

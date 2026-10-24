@@ -1,0 +1,13 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "search-algorithms:lib"
+
+    - path: "./test"
+      component: "search-algorithms:test:search-algorithms-test"
+
+    - path: "./test"
+      component: "search-algorithms:test:doc-test"
+
+    - path: "./bench/bench.hs"
+      component: "search-algorithms:bench:search-algorithms-benchmark"
