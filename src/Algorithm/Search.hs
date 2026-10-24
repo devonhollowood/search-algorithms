@@ -527,7 +527,8 @@ incrementalCosts ::
   -- incremental costs
   -> [cost]
   -- ^ List of incremental costs along given path
-incrementalCosts cost_fn states = zipWith cost_fn states (tail states)
+incrementalCosts _cost_fn [] = []
+incrementalCosts cost_fn states@(_first:rest) = zipWith cost_fn states rest
 
 -- | @incrementalCostsM@ is a monadic version of 'incrementalCosts': it has
 -- support for a monadic @const_fn@ parameter.
@@ -542,7 +543,8 @@ incrementalCostsM ::
   -- incremental costs
   -> m [cost]
   -- ^ List of incremental costs along given path
-incrementalCostsM costM states = zipWithM costM states (tail states)
+incrementalCostsM _costM [] = return []
+incrementalCostsM costM states@(_first:rest) = zipWithM costM states rest
 
 
 -- | @next \`pruning\` predicate@ streams the elements generate by @next@ into a
@@ -756,7 +758,7 @@ instance Ord k => SearchContainer (LIFOHeap k a) where
     | Map.null inner = Nothing
     | otherwise = case Map.findMin inner of
       (k, [a]) -> Just ((k, a), LIFOHeap $ Map.deleteMin inner)
-      (k, a : _) -> Just ((k, a), LIFOHeap $ Map.updateMin (Just . tail) inner)
+      (k, a : _) -> Just ((k, a), LIFOHeap $ Map.updateMin (Just . drop 1) inner)
       (_, []) -> pop (LIFOHeap $ Map.deleteMin inner)
                  -- Logically, this should never happen
   push (LIFOHeap inner) (k, a) = LIFOHeap $ Map.insertWith (++) k [a] inner
